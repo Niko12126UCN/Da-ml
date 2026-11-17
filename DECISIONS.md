@@ -34,6 +34,16 @@ Newest decisions are at the bottom. If a decision is changed later, the old entr
 | D-24 | 2026-11-17 | 80/20 stratified train/test split + 5-fold CV on the training part | ✅ |
 | D-25 | 2026-11-17 | Logistic regression preprocessing and settings | ✅ |
 | D-26 | 2026-11-17 | Comparison metrics: ROC-AUC, PR-AUC, precision @ 80% recall, Brier score | ✅ |
+| D-27 | 2026-11-17 | AutoML tool: AutoGluon 1.6.3 | ✅ |
+| D-28 | 2026-11-17 | `da-ml-automl` environment and its versions (scikit-learn 1.7.2, PyTorch 2.13 CPU) | ✅ |
+| D-29 | 2026-11-17 | AutoGluon settings: `best_quality`, 1 hour, optimise ROC-AUC | ✅ |
+| D-30 | 2026-11-17 | Include neural networks in the AutoML run | ✅ |
+| D-31 | 2026-11-17 | Run AutoML on the CPU, not the GPU | ✅ |
+| D-32 | 2026-11-17 | Shared split file `data/splits/train_test_split.csv` | ✅ |
+| D-33 | 2026-11-17 | How AutoGluon is compared with CatBoost | ✅ |
+| D-34 | 2026-11-17 | Where model files are stored (not committed) | ✅ |
+| D-35 | 2026-11-17 | Accept AutoGluon's sequential fold training (`ray` not installed) | ✅ |
+| D-36 | 2026-11-17 | AutoML result: keep CatBoost as the model to deploy | ✅ |
 
 ---
 
@@ -243,3 +253,111 @@ chosen threshold for the final test-set evaluation only.
 ROC-AUC and PR-AUC measure ranking; precision at 80% recall is the screening question in one number; the Brier score
 was added because the UI will show probabilities, and it is what revealed that balancing distorts them (D-19).
 Extends D-13.
+
+### D-27 — AutoML tool: AutoGluon
+**Date:** 2026-11-17
+**Decision:** Use **AutoGluon** (`autogluon.tabular` 1.6.3) for the AutoML benchmark, not PyCaret.
+**Why:** The question for step 2 is whether a clearly better model than CatBoost exists. AutoGluon is built for
+the best possible score (bagging + stacked ensembles), so if it can't beat CatBoost by more than 0.01 ROC-AUC, we can
+be confident CatBoost is close to the best this data allows. It is actively maintained, which matters if its model
+gets deployed, and `leaderboard()` still shows every individual model. PyCaret would give a nicer comparison table,
+but its development has slowed and it pins older package versions.
+
+### D-28 — `da-ml-automl` environment
+**Date:** 2026-11-17
+**Decision:** Separate conda environment `da-ml-automl` from `environment-automl.yml` (D-11): Python 3.11,
+`autogluon.tabular[catboost,lightgbm,xgboost,fastai]==1.6.3`, and the same versions as `da-ml` for numpy 1.26.4,
+pandas 2.2.2, CatBoost 1.2.8 and matplotlib 3.8.2. Exceptions: **scikit-learn 1.7.2** (instead of 1.4.0) and
+pyarrow/PyTorch as AutoGluon requires (PyTorch 2.13.0, CPU build).
+**Why:** AutoGluon needs `pyarrow>=23`, which conflicts with `pyarrow==20.0.0` in `da-ml`. scikit-learn 1.4.0
+ships an old Microsoft C++ runtime (`msvcp140.dll` 14.32); when it loads before PyTorch (CatBoost, XGBoost and
+AutoGluon all import scikit-learn), PyTorch fails with `WinError 1114: c10.dll`. scikit-learn 1.7.2 fixes this at
+the cause, so no import-order workaround is needed. The newer scikit-learn doesn't affect the comparison: the split
+comes from a file (D-32), and CatBoost is the same version.
+
+### D-29 — AutoGluon settings
+**Date:** 2026-11-17
+**Decision:** `TabularPredictor(label="diabetes", eval_metric="roc_auc")`, `fit(presets="best_quality",
+time_limit=3600)`, `verbosity=1`. AutoGluon's own internal random seeds are left at their defaults. The test set is
+not given to AutoGluon.
+**Why:** `best_quality` (bagging + stacking) gives AutoGluon its best chance to beat CatBoost. 1 hour was chosen by
+the team as enough for all model types on 200k rows; gains beyond that are usually very small. ROC-AUC is our
+comparison metric (D-26), so AutoGluon optimises it directly.
+
+### D-30 — Include neural networks
+**Date:** 2026-11-17
+**Decision:** Install the `fastai` extra (PyTorch), so AutoGluon also trains its two neural network models
+(`NeuralNetTorch`, `NeuralNetFastAI`).
+**Why:** Chosen by the team for a fairer benchmark that covers a really different type of model. They are usually
+not better on tabular data like this, but now we can show it rather than assume it. Cost: ~1–2 GB larger install.
+A 20k-row trial run on 2026-11-17 confirmed both neural networks train.
+
+### D-31 — CPU, not GPU
+**Date:** 2026-11-17
+**Decision:** Run AutoGluon on the CPU (i7-13700H, 20 threads). PyTorch is the CPU build; the RTX 4050 laptop GPU is
+not used.
+**Why:** With a fixed time budget (D-29), a GPU wouldn't shorten the run, only fit more models into it. Only the
+neural networks and CatBoost can use the GPU (XGBoost is installed as `xgboost-cpu`; LightGBM needs a special build;
+random forest/extra trees/kNN are CPU only). The data (200k × 21) is too small for a GPU to pay off, and CatBoost on
+the GPU uses different internal settings, which would weaken the comparison with our CPU CatBoost. Can be revisited
+for large neural networks or tabular foundation models.
+
+### D-32 — Shared split file
+**Date:** 2026-11-17
+**Decision:** `Modeling.ipynb` saves its 80/20 split (D-24) to `data/splits/train_test_split.csv` (`row` = row
+number in the raw CSV, `split` = `train`/`test`). `AutoML.ipynb` reads this file instead of re-splitting, and
+checks that it matches the dataset.
+**Why:** The two notebooks run in different environments with different scikit-learn versions (D-28). Saving the
+split guarantees both use exactly the same rows. After adding the cell, `Modeling.ipynb` was re-run and reproduced
+all step 1 scores exactly.
+
+### D-33 — How AutoGluon is compared with CatBoost
+**Date:** 2026-11-17
+**Decision:** In `AutoML.ipynb`:
+- our CatBoost is **retrained in the same notebook** with the step 1 settings (D-20, D-21) on the same training
+  rows, with its threshold from 5-fold out-of-fold predictions;
+- two AutoGluon models are compared: its **best model** (usually an ensemble) and its **best single model** (no
+  stacking or ensembling, easier to deploy), with thresholds from AutoGluon's out-of-fold predictions;
+- all three are scored once on the test set with the same metrics (D-26) at 80% recall (D-23), plus prediction
+  time and AutoGluon's model size;
+- the D-10 rule is applied to the ROC-AUC difference;
+- permutation feature importance of the best AutoGluon model on 5,000 test rows.
+**Why:** Same data, same metrics and the same threshold method make the comparison fair. Including the best single
+model shows what we'd get without the deployment cost of a full ensemble. Prediction time and size matter for
+step 5 (API).
+
+### D-34 — Model file storage
+**Date:** 2026-11-17
+**Decision:** AutoGluon saves its models to `models/autogluon_benchmark/`, which is in `.gitignore` (also
+`AutogluonModels/` and `catboost_info/`). In `AutoML.ipynb`, CatBoost runs with `allow_writing_files=False`.
+**Why:** AutoGluon's model folder can be several GB, and it can be recreated by re-running the notebook. Large
+binary files don't belong in git. The final model for deployment is decided in a later step.
+
+### D-35 — Sequential fold training (`ray` not installed)
+**Date:** 2026-11-17 (noticed in the run log after the AutoML run)
+**Decision:** Accept that AutoGluon trained the bagging folds **one after another** because the optional `ray`
+package wasn't installed (it isn't part of the extras chosen in D-28). The run was not repeated with `ray`.
+**Why:** AutoGluon still trained every model type, including both neural networks, within the hour; only a few
+extra variants were skipped for lack of time. With `ray`, folds run in parallel and more variants fit in the same
+budget, but every strong model already scored within 0.824–0.826, so more variants would not plausibly add the
++0.01 needed by D-10. Installing `ray` on Windows also adds another large, less-tested dependency. If AutoML is run
+again, `ray>=2.43.0,<2.59.0` can be added to `environment-automl.yml`.
+
+### D-36 — Keep CatBoost after the AutoML benchmark
+**Date:** 2026-11-17
+**Decision:** **CatBoost** (step 1 settings: D-19 to D-21) remains the model to deploy. The AutoGluon models are not
+used further; they stay in the git-ignored `models/autogluon_benchmark/` folder only as a record.
+**Why:** Applying the rule agreed before the run (D-10) to the test set (`AutoML.ipynb`, run 11:04–12:08):
+
+| Model | ROC-AUC | Precision @ ~80% recall | Predict 50k rows | Size |
+|---|---|---|---|---|
+| AutoGluon best (WeightedEnsemble_L2) | 0.8261 | 33.3% | 8.8 s | ~3 GB (all models) |
+| AutoGluon best single (bagged CatBoost) | 0.8260 | 33.2% | 0.12 s | part of the above |
+| **Our CatBoost** | 0.8248 | 33.1% | 0.01 s | a few MB |
+
+The best gain is +0.0012 ROC-AUC, far below the +0.01 threshold. All strong model types (CatBoost, LightGBM,
+XGBoost, two neural networks) scored 0.824–0.826, which shows the data limits the score, not the model. The
+ensemble's tiny gain doesn't justify ~700× slower predictions, ~3 GB of files and AutoGluon + PyTorch as API
+dependencies. Our CatBoost retrained in `AutoML.ipynb` scored 0.8248 vs. 0.8247 in `Modeling.ipynb`; the 0.0001
+difference comes from the different scikit-learn version and thread scheduling and doesn't affect the conclusion.
+Possible later improvement: bag our CatBoost over folds like AutoGluon did (~+0.001), only if it is ever needed.

@@ -26,8 +26,9 @@ Build a complete pipeline that can:
 | EDA + YData Profiling report (`ml/notebooks/EDA.ipynb`, `Diabetes_EDA_Profile.html`) | ✅ Done |
 | Feasibility assessment (`Diabetes_Prediction_Feasibility.md`) | ✅ Done |
 | Model comparison (`ml/notebooks/Modeling.ipynb`): CatBoost chosen, 80% recall | ✅ Done (2026-11-17) |
-| AutoML benchmark | ⬜ Next |
-| Training script + validation (`ml/train.py`, `ml/validation.py`) | ⬜ |
+| AutoML benchmark (`ml/notebooks/AutoML.ipynb`): AutoGluon +0.001 ROC-AUC, CatBoost kept | ✅ Done (2026-11-17) |
+| Shared input validation (`ml/validation.py`) | ⬜ Next |
+| Training script (`ml/train.py`) | ⬜ |
 | API (`api/main.py`) | ⬜ |
 | Web UI (`ui/app.py`) | ⬜ |
 | Deployment | ⬜ (target not decided, see section 9) |
@@ -154,4 +155,4 @@ Da-ml/
 - ~~**Duplicates:** keep or drop the ~24k duplicate rows?~~ → **Keep** (D-17)
 - ~~**Balancing:** class weights or 50/50 downsampling?~~ → **Neither**; use the threshold (D-19)
 - ~~**Exact recall target** for the threshold?~~ → **80%** (D-23)
-- **Which AutoML tool:** AutoGluon (strongest) or PyCaret (clearest overview)?
+- ~~**Which AutoML tool:** AutoGluon or PyCaret?~~ → **AutoGluon** (D-27); result: CatBoost kept (D-36)

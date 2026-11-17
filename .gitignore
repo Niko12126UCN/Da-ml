@@ -221,3 +221,7 @@ __marimo__/
 
 # CatBoost training logs
 catboost_info/
+
+# AutoGluon models (large, reproducible from AutoML.ipynb)
+models/autogluon_benchmark/
+AutogluonModels/
