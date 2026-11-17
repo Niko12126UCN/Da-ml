@@ -31,6 +31,9 @@ Newest decisions are at the bottom. If a decision is changed later, the old entr
 | D-21 | 2026-11-17 | Compare models with default settings (no tuning) in step 1 | ✅ |
 | D-22 | 2026-11-17 | CatBoost is the manual winner (the model AutoML must beat) | ✅ |
 | D-23 | 2026-11-17 | Recall target 80% for the screening threshold | ✅ |
+| D-24 | 2026-11-17 | 80/20 stratified train/test split + 5-fold CV on the training part | ✅ |
+| D-25 | 2026-11-17 | Logistic regression preprocessing and settings | ✅ |
+| D-26 | 2026-11-17 | Comparison metrics: ROC-AUC, PR-AUC, precision @ 80% recall, Brier score | ✅ |
 
 ---
 
@@ -207,3 +210,36 @@ threshold is chosen on cross-validated (out-of-fold) predictions, never on the t
 diabetes) and flags ~38% of people. On the test set: 79.6% recall, 33.0% precision at threshold 0.151. Going to
 90% recall would flag half of everyone; 75% would miss 1 in 4. The exact threshold value is recomputed when the
 final model is trained and saved together with it (D-15).
+
+### D-24 — 80/20 split + 5-fold cross-validation
+**Date:** 2026-11-17 (applied in `Modeling.ipynb`; logged after the user asked about the split)
+**Decision:** One stratified 80/20 train/test split with a fixed seed (`random_state=42`): 202,944 training rows and
+50,736 test rows, both 15.8% positive. All comparisons use stratified 5-fold cross-validation on the training part.
+The test set is used once, for the final evaluation. AutoML (step 2) uses the **same** split.
+**Why:** 20% is already a large test set (~8,000 positive cases), so its scores are stable; the test results
+matched CV within ~0.001 ROC-AUC. Cross-validation replaces a separate validation set, so a bigger hold-out (e.g.
+70/30) would only take training data away without making the test more reliable. Stratifying keeps the real class
+ratio in every part (D-12).
+
+### D-25 — Logistic regression preprocessing and settings
+**Date:** 2026-11-17 (applied in `Modeling.ipynb`; logged in the settings review after D-24)
+**Decision:** scikit-learn pipeline with:
+- `BMI`, `MentHlth`, `PhysHlth` → `StandardScaler`,
+- `GenHlth`, `Age`, `Education`, `Income` → `OneHotEncoder(handle_unknown="ignore")`,
+- the 14 binary 0/1 columns → passed through unchanged,
+- `LogisticRegression(max_iter=2000)` with default regularisation (L2, `C=1.0`, `lbfgs` solver).
+**Why:** Logistic regression is sensitive to feature scale, so the real-valued features are standardised. One-hot
+encoding lets it learn a separate effect per level of the ordinal codes (e.g. risk rising with age, then dipping
+at 80+), which a single linear weight can't capture. Binary flags are already on a 0/1 scale. `max_iter=2000`
+avoids convergence warnings; the regularisation was left at its default per D-21.
+
+### D-26 — Comparison metrics
+**Date:** 2026-11-17 (applied in `Modeling.ipynb`; logged in the settings review after D-24)
+**Decision:** Models are compared on four threshold-free metrics, computed on out-of-fold predictions:
+**ROC-AUC** (main metric), **PR-AUC** (average precision), **precision at 80% recall**, and the **Brier score**
+(accuracy of the predicted probabilities). Recall, precision, F1, accuracy and share flagged are reported at the
+chosen threshold for the final test-set evaluation only.
+**Why:** The threshold is decided after the comparison (D-23), so the comparison itself must not depend on one.
+ROC-AUC and PR-AUC measure ranking; precision at 80% recall is the screening question in one number; the Brier score
+was added because the UI will show probabilities, and it is what revealed that balancing distorts them (D-19).
+Extends D-13.
