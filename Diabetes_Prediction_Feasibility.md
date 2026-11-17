@@ -77,7 +77,7 @@ Expect a good risk score, not a diagnosis.
 ## Expected performance
 
 Expect roughly **85–87% accuracy on the full dataset**, but that figure is misleading, because a model that always
-answers "no diabetes" already gets about 86% here. A better guide is **ROC-AUC of about 0.82**, or **about 75%
+answers "no diabetes" already gets about 84% here. A better guide is **ROC-AUC of about 0.82**, or **about 75%
 accuracy on the balanced 50/50 file**. These numbers come from published work and Kaggle notebooks on this dataset,
 not from anything trained here.
 
@@ -85,7 +85,7 @@ Assuming the yes/no target (prediabetes and diabetes merged):
 
 | Metric | Expected | Baseline (always "no diabetes") |
 |---|---|---|
-| Accuracy, full data (~86% "no") | ~85–87% | ~86% |
+| Accuracy, full data (~84% "no") | ~85–87% | ~84% |
 | Accuracy, balanced 50/50 file | ~74–76% | 50% |
 | ROC-AUC | ~0.80–0.83 | 0.50 |
 
@@ -177,7 +177,7 @@ In practice, CatBoost often gives good results **with its default settings** and
 | Mostly categorical / ordinal codes (`GenHlth`, `Age`, `Income`, `Education`) | Native categorical support |
 | Risk depends on **combinations** (older + high BMI + high BP) | Trees naturally capture combinations of features |
 | Non-linear patterns (risk rises with age, then dips at 80+) | Trees don't assume straight-line relationships |
-| Class imbalance (86% "no") | `auto_class_weights="Balanced"` gives the rare class more weight |
+| Class imbalance (84% "no") | `auto_class_weights="Balanced"` gives the rare class more weight |
 | 250k rows | Fast enough on a normal laptop |
 | You want to know *why* | Built-in feature importance and SHAP values show which features drove each prediction |
 
@@ -239,7 +239,7 @@ different question, from "is a simple model enough?" to "does a different kind o
 | **Recall** at a chosen threshold | For screening: what share of diabetics are caught |
 | **Precision** at the same threshold | What share of the flagged people actually have diabetes |
 | **F1** | One number balancing recall and precision |
-| **Accuracy** | Report it, but compare it against the dummy baseline (~86%) |
+| **Accuracy** | Report it, but compare it against the dummy baseline (~84%) |
 | **Training time** | Practical cost |
 
 ### What to expect from the comparison

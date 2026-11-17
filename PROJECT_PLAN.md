@@ -25,7 +25,8 @@ Build a complete pipeline that can:
 | Environment (`environment.yml`, conda env `da-ml`) | ✅ Done |
 | EDA + YData Profiling report (`ml/notebooks/EDA.ipynb`, `Diabetes_EDA_Profile.html`) | ✅ Done |
 | Feasibility assessment (`Diabetes_Prediction_Feasibility.md`) | ✅ Done |
-| Model comparison (`ml/notebooks/Modeling.ipynb`) | ⬜ Next |
+| Model comparison (`ml/notebooks/Modeling.ipynb`): CatBoost chosen, 80% recall | ✅ Done (2026-11-17) |
+| AutoML benchmark | ⬜ Next |
 | Training script + validation (`ml/train.py`, `ml/validation.py`) | ⬜ |
 | API (`api/main.py`) | ⬜ |
 | Web UI (`ui/app.py`) | ⬜ |
@@ -37,7 +38,7 @@ The model choice only needs to be **argued for and tested**, not exhaustive. The
 
 | Step | Method | Purpose |
 |---|---|---|
-| 0 | **Dummy classifier** (always "no diabetes") | The floor any real model must beat (~86% accuracy) |
+| 0 | **Dummy classifier** (always "no diabetes") | The floor any real model must beat (~84% accuracy) |
 | 1 | **Logistic regression** (manual) | Simple, fully explainable linear baseline. Contrasts best with CatBoost (linear vs. trees) |
 | 2 | **CatBoost** (manual) | Main candidate: gradient-boosted trees with native handling of categorical features |
 | 3 | **AutoML** (benchmark) | Tries many models automatically to check whether something clearly better exists |
@@ -72,8 +73,8 @@ so CatBoost will most likely be kept.
 - **Balancing only the training data:**
   - Option A: **class weights** (`class_weight="balanced"` / `auto_class_weights="Balanced"`), which keeps all data.
   - Option B: **50/50 downsampling** of the training data (~70k rows is still plenty).
-  - Try both and compare.
-  - **Never balance the test set.** It must keep the real ratio (~86% / 14%), or the scores, especially precision,
+  - Try both and compare. → **Result: neither is used** (D-19), see `DECISIONS.md`.
+  - **Never balance the test set.** It must keep the real ratio (~84% / 16%), or the scores, especially precision,
     look better than they would be in practice.
 - **Duplicates:** decide how to handle the ~24k duplicate rows **before** splitting, so identical rows can't end up
   in both train and test.
@@ -91,7 +92,7 @@ so CatBoost will most likely be kept.
 | **ROC-AUC** | Main metric for comparing models (independent of threshold) |
 | **PR-AUC** | Performance on the minority class |
 | **F1** | Balance of recall and precision |
-| **Accuracy** | Reported only next to the dummy baseline (~86%) |
+| **Accuracy** | Reported only next to the dummy baseline (~84%) |
 | **Training / prediction time, model size** | Matters for deployment |
 
 - **Threshold chosen for recall**, e.g. catch at least ~80% of diabetics and accept more false alarms. A false alarm
@@ -150,7 +151,7 @@ Da-ml/
 
 - **Deployment target:** local (API + UI on one machine), Docker container (Docker Desktop is installed), or hosted
   (e.g. Azure, Render)? This decides how much model size and dependencies matter, especially for an AutoML model.
-- **Duplicates:** keep or drop the ~24k duplicate rows?
-- **Balancing:** class weights or 50/50 downsampling? Decide based on the comparison in `Modeling.ipynb`.
-- **Exact recall target** for the threshold (e.g. 80%)?
+- ~~**Duplicates:** keep or drop the ~24k duplicate rows?~~ → **Keep** (D-17)
+- ~~**Balancing:** class weights or 50/50 downsampling?~~ → **Neither**; use the threshold (D-19)
+- ~~**Exact recall target** for the threshold?~~ → **80%** (D-23)
 - **Which AutoML tool:** AutoGluon (strongest) or PyCaret (clearest overview)?
