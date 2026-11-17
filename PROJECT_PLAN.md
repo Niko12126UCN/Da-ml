@@ -4,6 +4,7 @@
 (BRFSS 2015, `diabetes_012_health_indicators_BRFSS2015.csv`)
 **Background:** see [`Diabetes_Prediction_Feasibility.md`](Diabetes_Prediction_Feasibility.md) for why prediction is
 feasible, expected performance, and an explanation of CatBoost.
+**Decisions:** [`DECISIONS.md`](DECISIONS.md) · **Measured results:** [`RESULTS.md`](RESULTS.md)
 
 ## 1. Goal
 
@@ -61,8 +62,9 @@ The model choice only needs to be **argued for and tested**, not exhaustive. The
 > our chosen threshold, on the same test set. Otherwise we deploy CatBoost (or logistic regression, if it is within
 > ~0.01 of CatBoost, since it is simpler to explain).
 
-Expected outcome: models on this data usually score within ~0.01–0.02 ROC-AUC of each other (around 0.80–0.83),
-so CatBoost will most likely be kept.
+**Actual outcome (2026-11-17):** as expected. CatBoost beat logistic regression by 0.006 ROC-AUC (0.825 vs. 0.819),
+and AutoGluon's best model beat CatBoost by only 0.0012, so **CatBoost is kept** (D-22, D-36). Full numbers in
+[`RESULTS.md`](RESULTS.md).
 
 ## 4. Data preparation
 
@@ -142,6 +144,8 @@ Da-ml/
 ├── ui/app.py                      # Dash form → calls /predict → shows risk level + disclaimer
 ├── environment.yml                # da-ml environment                                ✅
 ├── Diabetes_Prediction_Feasibility.md                                                ✅
+├── DECISIONS.md                   # every decision: what, why, when                  ✅
+├── RESULTS.md                     # all measured results, step by step               ✅
 └── PROJECT_PLAN.md                # this file
 ```
 

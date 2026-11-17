@@ -5,6 +5,9 @@
 **Based on:** the dataset itself, `EDA.ipynb` and the YData Profiling report `Diabetes_EDA_Profile.html`.
 No model was trained for this assessment.
 
+> **Update 2026-11-17:** models have since been trained. The predictions below held up; see the
+> "Expected vs. actual" section in [`RESULTS.md`](RESULTS.md).
+
 ## Short answer
 
 **Yes, it's feasible, but only for a specific job.** A model trained on this data can **estimate a person's risk**
