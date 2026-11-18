@@ -23,6 +23,11 @@ MESSAGES = {
 }
 
 
+def format_percent(probability):
+    """'33%', or 'less than 1%' for very low risks (instead of a misleading '0%')."""
+    return "less than 1%" if probability < 0.005 else f"{probability:.0%}"
+
+
 def risk_level(probability, threshold, high_risk=HIGH_RISK):
     if probability >= high_risk:
         return "high"
@@ -38,6 +43,6 @@ def assess(probability, threshold, high_risk=HIGH_RISK):
         "probability": round(float(probability), 4),
         "risk_level": level,
         "flagged": level != "low",
-        "message": MESSAGES[level].format(pct=f"{probability:.0%}"),
+        "message": MESSAGES[level].format(pct=format_percent(probability)),
         "disclaimer": DISCLAIMER,
     }

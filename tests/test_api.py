@@ -29,6 +29,7 @@ def test_assess_wording():
     assert "42%" in result["message"] and "doctor" in result["message"]
     assert result["disclaimer"] == DISCLAIMER
     assert not assess(0.05, threshold=0.151)["flagged"]
+    assert "(less than 1%)" in assess(0.003, threshold=0.151)["message"]
 
 
 # --- API ---
