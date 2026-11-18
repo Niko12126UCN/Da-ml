@@ -55,6 +55,10 @@ Newest decisions are at the bottom. If a decision is changed later, the old entr
 | D-45 | 2026-11-18 | Model saved in CatBoost's own format (`model.cbm`) + `metadata.json` | ✅ |
 | D-46 | 2026-11-18 | Each training run gets its own folder `models/<run_id>/`; `models/latest.txt` names the current one | ✅ |
 | D-47 | 2026-11-18 | Small trained models are committed to git; the user does all commits | ✅ |
+| D-48 | 2026-11-18 | Risk levels: low < screening threshold ≤ elevated < 30% ≤ high | ✅ |
+| D-49 | 2026-11-18 | Messages recommend seeing a doctor, not a specific test | ✅ |
+| D-50 | 2026-11-18 | API design: `/health`, `/model`, `/predict` (one person or a list, max 1,000) | ✅ |
+| D-51 | 2026-11-18 | API runs on 127.0.0.1:5001, Flask debug mode off | ✅ |
 
 ---
 
@@ -480,3 +484,59 @@ long as they are small (~0.6 MB per run). Large artifacts stay git-ignored (Auto
 **Why:** The user's decision: with a model in the repo, the API and UI work straight after cloning, without
 training first. The user commits themselves to stay in control of what ends up in the repo. Old runs that are no
 longer needed can be deleted.
+
+### D-48 — Risk levels
+**Date:** 2026-11-18
+**Decision:** The predicted probability is shown as one of three levels (defined in `ml/risk.py`):
+- **low:** below the model's screening threshold (from `metadata.json`; 15.1% for `catboost_20261118_084406`),
+- **elevated:** from the threshold up to 30%,
+- **high:** 30% and above (`HIGH_RISK = 0.30`).
+Elevated and high are both "flagged". The screening threshold stays tied to the model (re-chosen for 80% recall on
+every training run, D-23); the 30% cut-off is fixed.
+**Why:** Chosen by the team after reviewing the out-of-fold table (`RESULTS.md`, step 5). 30% is about twice the
+average risk (15.8%), which is easy to explain. About 1 in 5 people are "high", and 44.5% of them have
+prediabetes/diabetes, ~9× the low group (5.1%). The "high" cut-off doesn't change who is flagged, so it doesn't
+change false positives or false negatives; it only changes how urgent the message is. The probabilities are
+calibrated, so the percentage can be shown as is.
+
+### D-49 — Messages recommend a doctor, not a test
+**Date:** 2026-11-18
+**Decision:** The messages tell the user to **see/talk to their doctor**, never to take a specific test (e.g. blood
+sugar / HbA1c):
+- low: "Your estimated risk is low (X%). If you have symptoms or concerns, talk to your doctor."
+- elevated: "Your estimated risk is above average (X%). Consider talking to your doctor about your diabetes risk."
+- high: "Your estimated risk is high (X%), about twice the average or more. We recommend that you see your doctor
+  about your diabetes risk."
+Every result also carries: "This is a screening estimate based on survey answers, not a diagnosis."
+**Why:** The team's decision: the tool should send people to a doctor, who decides what to check; recommending a
+specific test is medical advice the tool shouldn't give. The low message still mentions a doctor because a low
+estimate doesn't rule out diabetes (20% of diabetics are in the low group). Replaces the example wording
+("consider a blood glucose / HbA1c test") in `PROJECT_PLAN.md` section 7. The purpose in D-07 is unchanged.
+
+### D-50 — API design
+**Date:** 2026-11-18
+**Decision:** Flask app in `api/main.py` (like the taxi project), created by `create_app()`:
+- `GET /health` → status and the loaded model's run ID,
+- `GET /model` → feature list, allowed ranges, threshold, risk-level cut-offs, the model's test metrics and the
+  disclaimer (so the UI doesn't need to hard-code them),
+- `POST /predict` → JSON object (one person) or JSON list (several people, at most 1,000 per request). Each result
+  has `probability` (rounded to 4 decimals), `risk_level`, `flagged`, `message` and `disclaimer`, plus the model's
+  run ID.
+- Input is checked with `validate_features` (D-37, D-40); invalid input returns **HTTP 400** with the full list of
+  problems as `errors`. A body that isn't JSON also returns 400.
+- At start-up the API loads the model named in `models/latest.txt` (D-46) and refuses to start if the model's
+  feature list differs from `ml/validation.py`.
+- Tests in `tests/test_api.py` use Flask's test client on the committed model; `tests/` is a package
+  (`tests/__init__.py`) so the test files can share example inputs.
+**Why:** The endpoints cover what the UI needs (step 6) and keep all model knowledge on the API side. Accepting a
+list allows batch screening; the 1,000 limit keeps a single request from using too much memory or time. The
+start-up check catches a model trained for a different format before it gives wrong answers.
+
+### D-51 — Host, port and debug mode
+**Date:** 2026-11-18
+**Decision:** `python -m api.main` serves on **127.0.0.1:5001** (only reachable from the same computer), with Flask
+debug mode **off**. Flask's built-in server is used for now; a production server is chosen in the deployment step.
+**Why:** Same port as the taxi project's API. Binding to 127.0.0.1 keeps the API private until deployment is
+decided. Debug mode is off because Flask's debugger lets anyone who can reach it run code on the machine, and it
+isn't needed (errors go to the log). Note for deployment: `gunicorn` (in `environment.yml`) doesn't run on Windows,
+so Windows deployment would need another server (e.g. `waitress`) or Docker.

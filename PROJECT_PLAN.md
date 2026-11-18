@@ -4,7 +4,8 @@
 (BRFSS 2015, `diabetes_012_health_indicators_BRFSS2015.csv`)
 **Background:** see [`Diabetes_Prediction_Feasibility.md`](Diabetes_Prediction_Feasibility.md) for why prediction is
 feasible, expected performance, and an explanation of CatBoost.
-**Decisions:** [`DECISIONS.md`](DECISIONS.md) · **Measured results:** [`RESULTS.md`](RESULTS.md)
+**Decisions:** [`DECISIONS.md`](DECISIONS.md) · **Measured results:** [`RESULTS.md`](RESULTS.md) ·
+**How the model works:** [`MODEL_EXPLAINED.md`](MODEL_EXPLAINED.md)
 
 ## 1. Goal
 
@@ -15,8 +16,8 @@ Build a complete pipeline that can:
 3. **Deploy the model** behind an API.
 4. **Host a web UI** where a person enters their answers and gets a risk prediction.
 
-> **This is a screening tool, not a diagnosis.** Its purpose is to find **candidates for an actual diabetes test**
-> (blood glucose / HbA1c). Every design decision below follows from that.
+> **This is a screening tool, not a diagnosis.** Its purpose is to find **people who should see a doctor about their
+> diabetes risk**; the doctor decides whether and how to test (D-49). Every design decision below follows from that.
 
 ## 2. Status
 
@@ -30,8 +31,8 @@ Build a complete pipeline that can:
 | AutoML benchmark (`ml/notebooks/AutoML.ipynb`): AutoGluon +0.001 ROC-AUC, CatBoost kept | ✅ Done (2026-11-17) |
 | Shared input validation (`ml/validation.py`, `tests/test_validation.py`) | ✅ Done (2026-11-18) |
 | Training script (`ml/train.py`, `tests/test_train.py`) → `models/catboost_20261118_084406/` | ✅ Done (2026-11-18) |
-| API (`api/main.py`) | ⬜ Next |
-| Web UI (`ui/app.py`) | ⬜ |
+| Risk levels + API (`ml/risk.py`, `api/main.py`, `tests/test_api.py`) | ✅ Done (2026-11-18) |
+| Web UI (`ui/app.py`) | ⬜ Next |
 | Deployment | ⬜ (target not decided, see section 9) |
 
 ## 3. Model selection approach
@@ -122,10 +123,12 @@ Bad input is **rejected with a clear error message**, never silently used.
 - **Human-readable inputs:** dropdowns and toggles with labels ("60–64", "$25,000–35,000", "Excellent … Poor")
   that map to the codes behind the scenes. The mappings are in the feature table in `EDA.ipynb`.
 - All 21 inputs are questions a person can answer about themselves, so the form works as a self-check.
-- **Output:** a risk level (**low / elevated / high**) plus the calibrated probability. Never a yes/no
-  "you have diabetes".
-- **Clear disclaimer** on the result, e.g.:
-  *"Elevated risk — consider a blood glucose / HbA1c test with your doctor. This is not a diagnosis."*
+- **Output:** a risk level (**low / elevated / high**, D-48) plus the calibrated probability. Never a yes/no
+  "you have diabetes". The API returns the level, the message and the disclaimer (D-50).
+- **Messages recommend seeing a doctor**, never a specific test (D-49), e.g. for high risk:
+  *"Your estimated risk is high (33%), about twice the average or more. We recommend that you see your doctor about
+  your diabetes risk."* Every result also says: *"This is a screening estimate based on survey answers, not a
+  diagnosis."*
 
 ## 8. Project structure
 
@@ -138,15 +141,17 @@ Da-ml/
 │   ├── notebooks/EDA.ipynb        # EDA + profiling report                           ✅
 │   ├── notebooks/Modeling.ipynb   # LR vs CatBoost vs AutoML comparison + reasoning
 │   ├── train.py                   # validate → train → save model + metrics + threshold    ✅
-│   └── validation.py              # shared schema checks (train.py AND the API)          ✅
+│   ├── validation.py              # shared schema checks (train.py AND the API)          ✅
+│   └── risk.py                    # risk levels (low/elevated/high) + messages            ✅
 ├── tests/                         # pytest: test_validation.py, test_train.py            ✅
 ├── models/<run_id>/               # model.cbm + metadata.json per run; latest.txt = current ✅
-├── api/main.py                    # Flask: /health, /predict (loads model, validates input)
+├── api/main.py                    # Flask: /health, /model, /predict (port 5001)           ✅
 ├── ui/app.py                      # Dash form → calls /predict → shows risk level + disclaimer
 ├── environment.yml                # da-ml environment                                ✅
 ├── Diabetes_Prediction_Feasibility.md                                                ✅
 ├── DECISIONS.md                   # every decision: what, why, when                  ✅
 ├── RESULTS.md                     # all measured results, step by step               ✅
+├── MODEL_EXPLAINED.md             # how a prediction is made, worked example, limits  ✅
 └── PROJECT_PLAN.md                # this file
 ```
 

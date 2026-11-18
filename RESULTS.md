@@ -3,6 +3,8 @@
 All **measured** findings of the project, step by step. For *what was decided because of them* (and why), see
 [`DECISIONS.md`](DECISIONS.md); for the plan, see [`PROJECT_PLAN.md`](PROJECT_PLAN.md); for the expectations
 before any model was trained, see [`Diabetes_Prediction_Feasibility.md`](Diabetes_Prediction_Feasibility.md).
+For how a prediction is made (with a worked example) and the limits of the model, see
+[`MODEL_EXPLAINED.md`](MODEL_EXPLAINED.md).
 
 **Common setup for all results** (unless stated otherwise):
 
@@ -184,6 +186,47 @@ AutoGluon model folder: ~2,975 MB (all models). Our CatBoost retrained here scor
 
 **Finding:** identical to CatBoost in `Modeling.ipynb` (step 1) to 4 decimals, including the threshold, and the
 split matches `data/splits/train_test_split.csv` row for row. The script reproduces the notebook result.
+
+## Step 5 — Risk levels and API (`ml/risk.py`, `api/main.py`, 2026-11-18)
+
+### Calibration of the predicted probabilities (CatBoost, 5-fold out-of-fold, training rows)
+
+| Predicted probability | People | Mean predicted | Actually have prediabetes/diabetes |
+|---|---|---|---|
+| 0–5% | 74,922 | 1.9% | 2.0% |
+| 5–10% | 29,605 | 7.3% | 7.5% |
+| 10–15.1% | 20,953 | 12.4% | 12.8% |
+| 15.1–20% | 15,667 | 17.5% | 18.0% |
+| 20–30% | 23,752 | 24.7% | 24.6% |
+| 30–40% | 16,257 | 34.6% | 35.3% |
+| 40–50% | 10,611 | 44.7% | 44.6% |
+| 50–60% | 6,303 | 54.5% | 52.8% |
+| 60–100% | 4,874 | 68.2% | 64.0% |
+
+**Finding:** the probabilities are honest up to ~60% (slightly too high above that). A shown "30%" really means
+about 30 of 100 similar people have prediabetes or diabetes; this confirms D-19. Highest predicted probability: 97.6%.
+
+### Risk-level options (same out-of-fold predictions; overall 15.8% positive)
+
+Low (below 15.1%): 61.8% of people, 5.1% of them positive, 20.0% of all positives.
+
+| "High" starts at | Elevated: people | Elevated: positive | High: people | High: positive | High: share of all positives |
+|---|---|---|---|---|---|
+| 25% | 14.1% | 20.0% | 24.1% | 40.6% | 62.1% |
+| **30%** (chosen, D-48) | **19.5%** | **22.0%** | **18.7%** | **44.5%** | **52.9%** |
+| 35% | 23.9% | 24.1% | 14.3% | 47.9% | 43.4% |
+| 40% | 27.5% | 25.9% | 10.7% | 51.3% | 34.9% |
+| 45% | 30.3% | 27.5% | 7.9% | 54.2% | 27.1% |
+| 50% | 32.7% | 28.8% | 5.5% | 57.7% | 20.2% |
+
+### API
+
+`python -m pytest tests`: **48 tests passed** (validation, training, risk levels, API); flake8 clean.
+
+Manual check against the running server (`python -m api.main`): `/health` returns the loaded model
+(`catboost_20261118_084406`). A person with high blood pressure, high cholesterol, BMI 31.4, general health 3 and
+age group 9 (60–64) got **33% → high**, with the doctor message and the disclaimer. Invalid input (`HighBP` 2, `BMI`
+as text, missing columns) got **HTTP 400** with all problems listed.
 
 ## Expected vs. actual
 
