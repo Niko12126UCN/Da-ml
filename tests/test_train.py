@@ -107,6 +107,8 @@ def test_good_model_goes_live_and_worse_model_does_not(quick_training, tmp_path)
     assert quick_training(0.825) == 0                       # first model: live
     first = latest(tmp_path)
     assert run_metadata(tmp_path, first)["quality_check"]["deployed"] is True
+    reference = json.loads((tmp_path / "models" / first / "reference.json").read_text())   # for monitoring (D-73)
+    assert reference["rows_train"] == 2400 and "reference" not in run_metadata(tmp_path, first)
 
     assert quick_training(0.80) == 2                        # 0.025 worse: trained, saved, but NOT live
     assert latest(tmp_path) == first

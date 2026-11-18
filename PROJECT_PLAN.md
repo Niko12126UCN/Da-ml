@@ -38,8 +38,8 @@ Build a complete pipeline that can:
 | Hosting for others (Docker / cloud) | ⬜ Later (D-60) |
 | **Phase 2 (D-66)** | |
 | 9. Data store + logging (`ml/store.py`, `data/store.db`; opt-in in the UI) | ✅ Done (2026-11-18) |
-| 10. Monitoring: data drift, prediction drift, volume, errors per model (`ml/monitoring.py`) | ⬜ Next |
-| 11. Real-time dashboard (`/dashboard`) | ⬜ |
+| 10. Monitoring: data drift, prediction drift, volume, errors per model (`ml/monitoring.py`) | ✅ Done (2026-11-18) |
+| 11. Real-time dashboard (`/dashboard`) | ⬜ Next |
 | 12. Closing the loop: drift alert → "retraining recommended"; model history | ⬜ |
 
 ## 3. Model selection approach
@@ -153,6 +153,7 @@ Da-ml/
 │   ├── validation.py              # shared schema checks (train.py AND the API)          ✅
 │   └── risk.py                    # risk levels (low/elevated/high) + messages            ✅
 ├── tests/                         # pytest: test_validation.py, test_train.py            ✅
+├── ml/monitoring.py               # drift / volume report; reference.json per model         ✅
 ├── ml/store.py / data/store.db    # data store: predictions (opt-in) + training runs (not in git) ✅
 ├── models/<run_id>/               # model.cbm + metadata.json per run; latest.txt = current ✅
 ├── api/main.py                    # Flask: /health, /model, /predict (port 5001)           ✅
@@ -183,7 +184,7 @@ watch data and model and feed back into retraining.
 | Stored models | `models/<run_id>/`, `latest.txt`, quality check | ✅ |
 | Inference pipeline | API with automatic model switch | ✅ |
 | Predictions → data store | `/predict?store=true` (UI: opt-in checkbox) | ✅ step 9 |
-| Data & model monitoring | drift of answers vs. training data, prediction distribution, share flagged, volume, errors | ⬜ step 10 |
+| Data & model monitoring | PSI drift of answers vs. training data, prediction drift, share flagged, volume, errors (`python -m ml.monitoring`) | ✅ step 10 |
 | Real-time dashboard | `/dashboard` page, refreshing by itself | ⬜ step 11 |
 | Feedback into training | drift alert → "retraining recommended"; training runs in the store | ⬜ step 12 |
 

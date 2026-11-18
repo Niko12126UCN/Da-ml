@@ -295,6 +295,33 @@ Live check with the app running on a **temporary** store (`DA_ML_STORE`, so no t
 Real store `data/store.db` created with the two existing training runs (`catboost_20261118_084406`,
 `catboost_20261118_100430`: test ROC-AUC 0.8247, recall 79.6%, both deployed) and 0 predictions.
 
+## Step 10 — Monitoring (`ml/monitoring.py`, 2026-11-18)
+
+`python -m pytest tests`: **92 tests passed** (10 new: PSI and its levels; bins cover every allowed value without
+overlap; reference file; "not enough data" below 100; same population → stable; different user group → drift with
+Age and BMI on top; model without reference; reference refused for the wrong data file; volume and error counting;
+the API counts every request without answers); flake8 clean. The real store was unchanged after the tests.
+
+`reference.json` built for both existing models. Reference of `catboost_20261118_100430`: 202,944 training rows,
+50,736 test rows, mean predicted risk 15.7%, share flagged 38.0%.
+
+`python -m ml.monitoring` on the real store: 0 requests, 0 stored predictions → **not enough data** (correct; no
+one has used the app with storage yet).
+
+Simulation on a temporary store (300 stored predictions, 312 requests incl. 12 invalid):
+
+| | Same population (300 unseen survey people) | Older, heavier users (same people, age 70–80+, BMI 35–45) |
+|---|---|---|
+| Status | **stable** | **drift** |
+| Prediction PSI | 0.030 | 1.674 |
+| Mean risk (reference 15.7%) | 16.0% | 30.4% |
+| Share flagged (reference 38.0%) | 38.7% | 75.3% |
+| Largest question PSIs | BMI 0.070, Age 0.028, MentHlth 0.017 (all stable) | BMI 7.17, Age 6.44 (drift); all others < 0.03 |
+| Error rate | 3.8% | 3.8% |
+
+**Finding:** monitoring separates a normal user group from a shifted one, points at the questions that changed, and
+shows the effect on the predictions (twice as many people flagged).
+
 ## Expected vs. actual
 
 Predictions from `Diabetes_Prediction_Feasibility.md` (written before any model was trained) compared with the

@@ -50,7 +50,7 @@ def test_predictions_are_stored_only_when_asked(tmp_path):
     client = create_app(store_path=store).test_client()
 
     assert client.post("/predict", json=PERSON).get_json()["stored"] is False
-    assert not store.exists()                                          # nothing written without ?store=true
+    assert read_table("predictions", store).empty                      # no answers stored without ?store=true
 
     body = client.post("/predict?store=true&source=ui", json=PERSON).get_json()
     assert body["stored"] is True

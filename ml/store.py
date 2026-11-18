@@ -3,6 +3,8 @@
 Tables:
     predictions    - one row per person whose answers were stored (opt-in only, D-68): time (UTC), model, probability,
                      risk level, flagged, source, and the 21 answers. No name, IP address or browser ID (D-67).
+    requests       - one row per /predict call: time, model, number of people, HTTP status, stored or not. No answers
+                     (D-75); used to monitor volume and errors.
     training_runs  - one row per trained model (deployed or not), imported from models/<run_id>/metadata.json.
 
 The database file is data/store.db (override with the environment variable DA_ML_STORE). It holds health data about
@@ -35,6 +37,16 @@ CREATE TABLE IF NOT EXISTS predictions (
 );
 CREATE INDEX IF NOT EXISTS predictions_created_at ON predictions (created_at);
 CREATE INDEX IF NOT EXISTS predictions_model ON predictions (model);
+
+CREATE TABLE IF NOT EXISTS requests (          -- every /predict call; counts only, no answers (D-75)
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at   TEXT    NOT NULL,              -- UTC, ISO 8601
+    model        TEXT    NOT NULL,
+    n_people     INTEGER NOT NULL,              -- people in the request (0 if it couldn't be read)
+    status       INTEGER NOT NULL,              -- HTTP status: 200 = OK, 400 = invalid input
+    stored       INTEGER NOT NULL               -- 1 = the answers were stored (opt-in)
+);
+CREATE INDEX IF NOT EXISTS requests_created_at ON requests (created_at);
 
 CREATE TABLE IF NOT EXISTS training_runs (
     run_id          TEXT PRIMARY KEY,
@@ -76,6 +88,15 @@ def log_predictions(X, results, model, source, path=DEFAULT_STORE):
     return len(rows)
 
 
+def log_request(model, n_people, status, stored, path=DEFAULT_STORE):
+    """Count one /predict call (for volume and error monitoring). No answers are stored here."""
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    with connect(path) as conn:
+        conn.execute("INSERT INTO requests (created_at, model, n_people, status, stored) VALUES (?, ?, ?, ?, ?)",
+                     (now, model, int(n_people), int(status), int(stored)))
+    conn.close()
+
+
 def import_training_runs(models_dir, path=DEFAULT_STORE):
     """Add every model folder in models_dir that isn't in the store yet. Returns the number of runs added."""
     added = 0
@@ -102,7 +123,7 @@ def import_training_runs(models_dir, path=DEFAULT_STORE):
 
 def read_table(table, path=DEFAULT_STORE):
     """A whole table as a DataFrame (for monitoring and the dashboard)."""
-    if table not in {"predictions", "training_runs"}:
+    if table not in {"predictions", "requests", "training_runs"}:
         raise ValueError(table)
     with connect(path) as conn:
         df = pd.read_sql_query(f"SELECT * FROM {table}", conn)

@@ -74,6 +74,17 @@ address or browser ID is stored. The file contains health data and is **never co
 Other API clients can ask for storage with `POST /predict?store=true`. To use another file, set the environment
 variable `DA_ML_STORE`.
 
+## Monitoring
+
+```
+python -m ml.monitoring
+```
+
+Shows the live model's request volume and error rate, and compares the stored answers (opt-in) with the data the
+model was trained on: per question and for the predictions, PSI < 0.1 is stable, 0.1–0.25 "watch", ≥ 0.25 "drift".
+At least 100 stored predictions of the live model are needed. Each model has a `reference.json` for this; for a model
+without one: `python -m ml.monitoring --build-reference <run_id> --data <csv it was trained on>`.
+
 ## Tests
 
 ```

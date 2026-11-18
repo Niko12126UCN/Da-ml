@@ -23,7 +23,7 @@ from catboost import CatBoostClassifier
 from flask import Flask, jsonify, request
 
 from ml.risk import DISCLAIMER, HIGH_RISK, assess
-from ml.store import DEFAULT_STORE, log_predictions
+from ml.store import DEFAULT_STORE, log_predictions, log_request
 from ml.validation import FEATURE_COLUMNS, FEATURE_RANGES, ValidationError, validate_features
 
 MODELS_DIR = Path(__file__).resolve().parents[1] / "models"
@@ -106,14 +106,25 @@ def create_app(models_dir=MODELS_DIR, store_path=DEFAULT_STORE):
     @app.post("/predict")
     def predict():
         data = request.get_json(silent=True)
+        body, status = handle_predict(data)
+        n_people = len(data) if isinstance(data, list) else int(isinstance(data, dict))
+        try:   # count every request for monitoring (D-75); never stops the response (D-71)
+            log_request(body.get("model") or store.get()[1]["run_id"], n_people, status, body.get("stored", False),
+                        store_path)
+        except Exception:
+            log.exception("Could not count the request in %s", store_path)
+        return jsonify(body), status
+
+    def handle_predict(data):
+        """Returns (response body, HTTP status)."""
         if data is None:
-            return jsonify(errors=["request body must be JSON (Content-Type: application/json)"]), 400
+            return {"errors": ["request body must be JSON (Content-Type: application/json)"]}, 400
         if isinstance(data, list) and len(data) > MAX_PEOPLE:
-            return jsonify(errors=[f"at most {MAX_PEOPLE} people per request, got {len(data)}"]), 400
+            return {"errors": [f"at most {MAX_PEOPLE} people per request, got {len(data)}"]}, 400
         try:
             X = validate_features(data)
         except ValidationError as e:
-            return jsonify(errors=e.errors), 400
+            return {"errors": e.errors}, 400
 
         model, metadata = store.get()
         results = [assess(p, metadata["threshold"]) for p in model.predict_proba(X)[:, 1]]
@@ -129,7 +140,7 @@ def create_app(models_dir=MODELS_DIR, store_path=DEFAULT_STORE):
             body["results"] = results
         else:
             body.update(results[0])
-        return jsonify(body)
+        return body, 200
 
     return app
 

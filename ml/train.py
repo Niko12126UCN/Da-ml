@@ -30,6 +30,8 @@ from sklearn.metrics import (accuracy_score, average_precision_score, brier_scor
                              precision_recall_curve, precision_score, recall_score, roc_auc_score)
 from sklearn.model_selection import StratifiedKFold, train_test_split
 
+from ml.monitoring import build_reference
+from ml.risk import HIGH_RISK
 from ml.store import DEFAULT_STORE, import_training_runs
 from ml.validation import FEATURE_COLUMNS, FEATURE_RANGES, TARGET_COLUMN, validate_training_data
 
@@ -109,13 +111,16 @@ def train(df, params=None, n_folds=N_FOLDS, log=print):
     model = make_model(params).fit(X_train, y_train)
     log(f"Final model trained on {len(X_train):,} rows ({time.time() - start:.0f} s)")
 
+    test_proba = model.predict_proba(X_test)[:, 1]
     info = {
         "threshold": threshold,
         "target_recall": TARGET_RECALL,
         "metrics": {
             "cross_validation": evaluate(y_train, oof, threshold),
-            "test": evaluate(y_test, model.predict_proba(X_test)[:, 1], threshold),
+            "test": evaluate(y_test, test_proba, threshold),
         },
+        # what the training data and the predictions looked like, for monitoring (D-73); saved as reference.json
+        "reference": build_reference(X_train, test_proba, threshold, HIGH_RISK),
         "rows": {"total": len(df), "train": len(X_train), "test": len(X_test),
                  "positive_share": float(y.mean())},
         "settings": {"model": "CatBoostClassifier", "params": params or CATBOOST_PARAMS, "seed": SEED,
@@ -177,13 +182,15 @@ def save(model, info, out_dir, data_path, quality=None):
         "model_file": "model.cbm",
         "features": FEATURE_COLUMNS,
         "feature_ranges": FEATURE_RANGES,
-        **info,
+        **{k: v for k, v in info.items() if k != "reference"},
         "data": {"file": data_path.name, "sha256": hashlib.sha256(data_path.read_bytes()).hexdigest()},
         "versions": {"python": platform.python_version(), "catboost": catboost.__version__,
                      "scikit-learn": sklearn.__version__, "pandas": pd.__version__, "numpy": np.__version__},
         "quality_check": quality,
     }
     (run_dir / "metadata.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
+    if "reference" in info:
+        (run_dir / "reference.json").write_text(json.dumps(info["reference"], indent=1), encoding="utf-8")
     return run_dir
 
 

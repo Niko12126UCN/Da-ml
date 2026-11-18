@@ -80,6 +80,10 @@ Newest decisions are at the bottom. If a decision is changed later, the old entr
 | D-70 | 2026-11-18 | Data store: SQLite file `data/store.db`, not committed to git | ✅ |
 | D-71 | 2026-11-18 | A data store problem never stops a prediction or a training run | ✅ |
 | D-72 | 2026-11-18 | Every training run (deployed or not) is recorded in the data store | ✅ |
+| D-73 | 2026-11-18 | Each model gets a `reference.json`: answer shares (training rows) and prediction distribution (test rows) | ✅ |
+| D-74 | 2026-11-18 | Drift: PSI ≥ 0.1 "watch", ≥ 0.25 "drift"; at least 100 stored predictions; all stored predictions of the live model | ✅ |
+| D-75 | 2026-11-18 | Every `/predict` request is counted (no answers) for volume and error monitoring | ✅ |
+| D-76 | 2026-11-18 | Tests can never write to the real data store (`tests/conftest.py`) | ✅ |
 
 ---
 
@@ -798,3 +802,54 @@ The two existing models were imported on 2026-11-18. `ml.train --store <path>` w
 **Why:** The drawing's "stored models" and "historical data" live in one place, so the dashboard (step 11) can show
 the model history and which data each model was trained on. Importing from `metadata.json` keeps the model folders
 as the source of truth; the store is an index of them.
+
+### D-73 — Reference per model
+**Date:** 2026-11-18
+**Decision:** At training time, `ml.train` saves `models/<run_id>/reference.json` (~7 KB) next to the model:
+- per question, the share of **training rows** in each bin: one bin per allowed code; BMI in 10 bins at the
+  training data's deciles; `MentHlth`/`PhysHlth` in the groups 0, 1–2, 3–5, 6–10, 11–20, 21–29, 30 days;
+- the model's predicted probabilities on the **test rows**: shares in 10 bins at their deciles, mean risk, share
+  flagged, share per risk level.
+For models trained before this, `python -m ml.monitoring --build-reference <run_id> --data <csv>` builds it from
+the same data and split; it refuses if the file's SHA-256 doesn't match the model's metadata. Done on 2026-11-18 for
+`catboost_20261118_084406` and `catboost_20261118_100430`.
+**Why:** Drift means "different from what the model learned from", so each model needs its own baseline, saved with
+it (a later model may be trained on other data). Training rows describe the population the model learned; test-row
+predictions describe how the model behaves on people it hasn't seen, which is what users are. Decile bins give each
+bin enough reference data; the day groups keep the large "0 days" and "30 days" peaks apart.
+
+### D-74 — Drift thresholds, minimum data, comparison window
+**Date:** 2026-11-18
+**Decision:** Monitoring (`ml/monitoring.py`) uses the **Population Stability Index** (PSI) per question and for the
+predicted probabilities:
+- PSI < **0.1** stable, **0.1–0.25** "watch", **≥ 0.25** "drift" (`PSI_WATCH`, `PSI_DRIFT`); empty bins count as
+  0.0001;
+- with fewer than **100** stored predictions of the live model, the status is "not enough data"
+  (`MIN_PREDICTIONS`);
+- compared are **all stored predictions made by the live model**, since it went live (selected by the model ID
+  stored with each prediction);
+- the overall status is the worst of all questions and the predictions.
+The report also shows mean risk, share flagged and the share per risk level next to the reference values.
+**Why:** Chosen by the team. 0.1 / 0.25 are the standard PSI thresholds (credit scoring and ML monitoring) and easy
+to explain. Below ~100 records PSI is mostly noise. Using everything since the model went live gives the most data
+per model; the trade-off (recent changes get diluted by older data) is accepted for now. Checked: 2,000 unseen people
+from the same survey were "stable" (all PSI < 0.1); 500 people changed to age 80+ and BMI 40 were "drift" with Age
+and BMI on top (`RESULTS.md`, step 10).
+
+### D-75 — Request counting
+**Date:** 2026-11-18
+**Decision:** The API counts **every** `/predict` call in a third table, `requests`: time (UTC), model, number of
+people, HTTP status (200 / 400) and whether the answers were stored. **No answers** are kept there, so it needs no
+consent. Monitoring uses it for request volume (total, last 24 h, last 7 days), error rate and the share of people
+who opted in. Counting never stops a response (D-71).
+**Why:** Stored predictions only cover people who opted in, so volume and errors would otherwise be invisible.
+Counts without answers aren't personal data. The error rate shows e.g. a broken client or UI sending invalid input.
+
+### D-76 — Tests never touch the real data store
+**Date:** 2026-11-18
+**Decision:** `tests/conftest.py` sets `DA_ML_STORE` to a temporary file before any project module is imported, so
+every test, including those using the default store path, writes to a throw-away database. Demos use a temporary
+store too.
+**Why:** Found while building step 10: with request counting, the existing API tests counted 1 test request into the
+real `data/store.db` (it was deleted). The real store holds research data (D-69); test data must never mix with it.
+After a full test run the real store was checked: 0 predictions, 0 requests, 2 training runs.
