@@ -51,6 +51,9 @@ python -m ml.train --data path/to/file.csv    # any CSV in the same Diabetes_012
 python -m ml.train --data ... --force         # deploy even if the quality check fails
 ```
 
+In PyCharm: choose **Train model** in the run menu (top right) and press ▶. To use another file, change the
+path under **Run → Edit Configurations… → Train model → Parameters**.
+
 This validates the data, trains CatBoost, picks the threshold for 80% recall, evaluates on a 20% test split and saves
 the model to a new folder `models/catboost_<date>_<time>/`. Then a **quality check** decides whether it goes live:
 test ROC-AUC at least 0.80 and not more than 0.01 below the current model, and recall at least 75%.

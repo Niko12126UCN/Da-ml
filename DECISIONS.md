@@ -71,6 +71,7 @@ Newest decisions are at the bottom. If a decision is changed later, the old entr
 | D-61 | 2026-11-18 | Quality check before a new model goes live; `--force` overrides | ✅ |
 | D-62 | 2026-11-18 | The running app switches to a new live model by itself (no restart) | ✅ |
 | D-63 | 2026-11-18 | Rejected models are kept (marked "not deployed"); unique folder names | ✅ |
+| D-64 | 2026-11-18 | PyCharm run configuration "Train model" | ✅ |
 
 ---
 
@@ -695,3 +696,13 @@ app down. Checked on 2026-11-18 with the app running (`RESULTS.md`, step 8).
 **Why:** Keeping rejected models makes it possible to see *why* a run was rejected, and to put it live later after
 all, by writing its folder name into `latest.txt`, if the team decides the check was too strict for that data. Folders are ~0.6 MB; rejected ones can be deleted (or not
 committed, D-47) when no longer needed. Same-second runs can happen in scripted pipelines.
+
+### D-64 — PyCharm run configuration "Train model"
+**Date:** 2026-11-18
+**Decision:** `.idea/runConfigurations/Train_model.xml` adds **"Train model"** to PyCharm's run menu. It runs
+`python -m ml.train --data "$PROJECT_DIR$/data/raw_data/diabetes_012_health_indicators_BRFSS2015.csv"` from the
+project root with the project interpreter (`da-ml`). To train on another file, change the path under **Run → Edit
+Configurations… → Train model → Parameters**.
+**Why:** The team asked for a PyCharm command for now, pointing at the same file used so far. Run configurations in
+`.idea/runConfigurations/` can be committed, so the command comes with the repository. The path is written out
+(even though it's the script's default) so it's obvious where to change it.
