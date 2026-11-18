@@ -32,8 +32,9 @@ Build a complete pipeline that can:
 | Shared input validation (`ml/validation.py`, `tests/test_validation.py`) | ✅ Done (2026-11-18) |
 | Training script (`ml/train.py`, `tests/test_train.py`) → `models/catboost_20261118_084406/` | ✅ Done (2026-11-18) |
 | Risk levels + API (`ml/risk.py`, `api/main.py`, `tests/test_api.py`) | ✅ Done (2026-11-18) |
-| Web UI (`ui/app.py`) | ⬜ Next |
-| Deployment | ⬜ (target not decided, see section 9) |
+| Web UI (`ui/app.py`, `ui/assets/style.css`, `tests/test_ui.py`) + README | ✅ Done (2026-11-18) |
+| Local deployment (`run.py`, `start.bat`): runs on this PC | ✅ Done (2026-11-18) |
+| Hosting for others (Docker / cloud) | ⬜ Later (D-60) |
 
 ## 3. Model selection approach
 
@@ -120,6 +121,8 @@ Bad input is **rejected with a clear error message**, never silently used.
 
 ## 7. Web UI
 
+- **Built (D-52 to D-57):** question cards with tap-to-select buttons, BMI from height and weight, all questions
+  required, result panel with a risk bar. Run with `python -m ui.app` (needs the API, see `README.md`).
 - **Human-readable inputs:** dropdowns and toggles with labels ("60–64", "$25,000–35,000", "Excellent … Poor")
   that map to the codes behind the scenes. The mappings are in the feature table in `EDA.ipynb`.
 - All 21 inputs are questions a person can answer about themselves, so the form works as a self-check.
@@ -146,7 +149,8 @@ Da-ml/
 ├── tests/                         # pytest: test_validation.py, test_train.py            ✅
 ├── models/<run_id>/               # model.cbm + metadata.json per run; latest.txt = current ✅
 ├── api/main.py                    # Flask: /health, /model, /predict (port 5001)           ✅
-├── ui/app.py                      # Dash form → calls /predict → shows risk level + disclaimer
+├── ui/app.py                      # Dash page → calls /predict → shows risk level (port 8050) ✅
+├── run.py / start.bat             # start API + UI together on this PC                ✅
 ├── environment.yml                # da-ml environment                                ✅
 ├── Diabetes_Prediction_Feasibility.md                                                ✅
 ├── DECISIONS.md                   # every decision: what, why, when                  ✅
@@ -160,7 +164,8 @@ Da-ml/
 
 ## 9. Open questions
 
-- **Deployment target:** local (API + UI on one machine), Docker container (Docker Desktop is installed), or hosted
+- ~~**Deployment target:** local, Docker or hosted?~~ → **Local for now** (D-59); hosting decided later (D-60).
+  Original question: local (API + UI on one machine), Docker container (Docker Desktop is installed), or hosted
   (e.g. Azure, Render)? This decides how much model size and dependencies matter, especially for an AutoML model.
 - ~~**Duplicates:** keep or drop the ~24k duplicate rows?~~ → **Keep** (D-17)
 - ~~**Balancing:** class weights or 50/50 downsampling?~~ → **Neither**; use the threshold (D-19)

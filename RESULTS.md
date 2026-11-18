@@ -228,6 +228,33 @@ Manual check against the running server (`python -m api.main`): `/health` return
 age group 9 (60–64) got **33% → high**, with the doctor message and the disclaimer. Invalid input (`HighBP` 2, `BMI`
 as text, missing columns) got **HTTP 400** with all problems listed.
 
+## Step 6 — Web UI (`ui/app.py`, 2026-11-18)
+
+`python -m pytest tests`: **60 tests passed** (validation, training, risk levels, API, UI); flake8 clean. The UI tests
+check that the form asks for every feature exactly once, that the answer codes match the allowed ranges, the BMI
+calculation, that a complete form gives a payload the API accepts, that unanswered questions are listed, the
+plain-language BMI error, and the marker position on the risk bar.
+
+Checked with the API and UI running (`python -m api.main`, `python -m ui.app`):
+- Screenshots (headless Chrome) of the page at 1280 px and 700 px wide, and of the result panel for real API answers:
+  <1% → low, 14% → low, 33% → high, 75% → high, plus the "unanswered questions" message.
+- The "Check my risk" logic against the live API: complete answers (175 cm, 96 kg → BMI 31.3) gave **33% → high**
+  with the doctor message; a missing age and weight were listed; 250 cm / 30 kg (BMI 4.8) was rejected with a
+  plain-language message.
+- Fixed after the screenshots (D-57): "0%" → "less than 1%", threshold shown as 15.1%; added the viewport tag for
+  phones. Narrow screenshots below ~550 px can't be taken with headless Chrome (it lays the page out at 548 px for a
+  520 px window), so the phone layout should be checked once in a real browser (Chrome: F12 → device toolbar).
+
+## Step 7 — Local deployment (`run.py`, `start.bat`, 2026-11-18)
+
+`python -m pytest tests`: **61 tests passed** (incl. `tests/test_run.py`, which really starts and stops both servers
+with `run.py --check`); flake8 clean.
+
+- `start.bat --check` (run from PowerShell by its full path, as a double-click does): found the `da-ml` environment,
+  started the API and the UI, both answered, both stopped; exit code 0.
+- Starting a second time while the API was already running: "Port already in use: 127.0.0.1:5001. Is the app
+  already running (another window)? Close it first." and exit code 1, without starting anything.
+
 ## Expected vs. actual
 
 Predictions from `Diabetes_Prediction_Feasibility.md` (written before any model was trained) compared with the

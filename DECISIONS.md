@@ -59,6 +59,15 @@ Newest decisions are at the bottom. If a decision is changed later, the old entr
 | D-49 | 2026-11-18 | Messages recommend seeing a doctor, not a specific test | ✅ |
 | D-50 | 2026-11-18 | API design: `/health`, `/model`, `/predict` (one person or a list, max 1,000) | ✅ |
 | D-51 | 2026-11-18 | API runs on 127.0.0.1:5001, Flask debug mode off | ✅ |
+| D-52 | 2026-11-18 | UI layout: question cards, tap-to-select buttons, result panel with risk bar | ✅ |
+| D-53 | 2026-11-18 | UI styling: Bootstrap 5 + one small stylesheet, system fonts | ✅ |
+| D-54 | 2026-11-18 | UI runs on 127.0.0.1:8050 and only talks to the API | ✅ |
+| D-55 | 2026-11-18 | Questions in plain language; BMI calculated from height (cm) and weight (kg) | ✅ |
+| D-56 | 2026-11-18 | Every question must be answered; nothing pre-filled except the "days" sliders (0) | ✅ |
+| D-57 | 2026-11-18 | Very low risks shown as "less than 1%"; screening threshold shown with one decimal | ✅ |
+| D-58 | 2026-11-18 | README with setup, run, train and test instructions | ✅ |
+| D-59 | 2026-11-18 | Local deployment: `run.py` + `start.bat` start API and UI together on this PC | ✅ |
+| D-60 | 2026-11-18 | Hosting (Docker / cloud) postponed; decided after local use | 🔶 |
 
 ---
 
@@ -540,3 +549,101 @@ debug mode **off**. Flask's built-in server is used for now; a production server
 decided. Debug mode is off because Flask's debugger lets anyone who can reach it run code on the machine, and it
 isn't needed (errors go to the log). Note for deployment: `gunicorn` (in `environment.yml`) doesn't run on Windows,
 so Windows deployment would need another server (e.g. `waitress`) or Docker.
+
+### D-52 — UI layout
+**Date:** 2026-11-18
+**Decision:** One Dash page (`ui/app.py`, Dash + dash-bootstrap-components, like the taxi project):
+- the 21 questions grouped on four cards: **About you**, **Your health**, **Lifestyle**, **Healthcare**,
+- choices as **tap-to-select buttons** (pill-shaped), not radio buttons; Yes/No questions show the question and the
+  buttons on one line on wide screens,
+- dropdowns for age group, education and income; sliders (0–30, value shown as "X days") for the two "days"
+  questions,
+- a **result panel** next to the questions (it stays in view while scrolling on wide screens, and sits below them on
+  phones) with the percentage, a coloured level badge, a **risk bar** with three equal-width zones (low / elevated /
+  high) and a marker, the message, "Of 100 people with answers like yours, about X have prediabetes or diabetes",
+  and the disclaimer,
+- problems (unanswered questions, impossible height/weight, API not running) are shown in the result panel as a
+  list in plain language.
+**Why:** The team asked for something simple and clean that doesn't look like an old-school form page. Buttons are
+quicker to use and easier to read than small radio buttons; one line per Yes/No question roughly halves the page
+length. The risk bar's zones are equal width (instead of 0–100% to scale) so the low and elevated zones, which
+are only 15 percentage points wide, stay readable; the level is also written out, so the colour is never the only
+signal.
+
+### D-53 — UI styling
+**Date:** 2026-11-18
+**Decision:** Bootstrap 5 (`dbc.themes.BOOTSTRAP`, loaded from the jsDelivr CDN) plus one stylesheet,
+`ui/assets/style.css`: light grey background, white cards with rounded corners and a thin border, one blue accent
+colour, green / amber / red for low / elevated / high, and the operating system's own fonts. The page has a viewport
+tag so it renders at phone width on phones.
+**Why:** Clean and modern with very little custom code. System fonts need no download and look native on every
+device. Note: the Bootstrap CSS comes from a CDN, so the browser needs internet access; for an offline deployment
+the file can be put in `ui/assets/` instead.
+
+### D-54 — UI host, port and API connection
+**Date:** 2026-11-18
+**Decision:** `python -m ui.app` serves on **127.0.0.1:8050** with debug mode off. It calls the API at
+`http://127.0.0.1:5001`, which can be changed with the environment variable `DA_ML_API_URL`. The UI contains **no
+model logic**: it sends the answers to `/predict` and reads the threshold and "high" cut-off from `/model` (cached
+after the first call).
+**Why:** Port 8050 matches the taxi project's UI. Keeping all model knowledge in the API means a new model (or new
+cut-offs) only needs an API restart, and the UI can't show different cut-offs from the ones the API uses. The
+environment variable lets the API live elsewhere in a deployment. Debug mode off for the same reason as the API
+(D-51).
+
+### D-55 — Plain-language questions; BMI from height and weight
+**Date:** 2026-11-18
+**Decision:** The questions are worded like the original BRFSS 2015 survey questions in plain language (for example
+"Has a doctor ever told you that you have high blood pressure?"), and the codes are never shown. BMI is calculated
+from **height in cm and weight in kg**, rounded to one decimal and sent to the API, which rounds it to a whole
+number like the training data (D-38). Income is asked in **US dollars**, as in the survey.
+**Why:** The model learned from people answering those questions, so close wording keeps the answers comparable.
+Few people know their BMI, but everyone knows their height and weight. Metric units are the standard almost everywhere outside the US;
+the BMI is the same either way. Income stays in US dollars because the model's income groups are
+2015 US dollar ranges; converting them would suggest a precision the data doesn't have.
+
+### D-56 — All questions required
+**Date:** 2026-11-18
+**Decision:** Every question starts unanswered and must be answered before a result is shown; missing answers are
+listed by name. Only the two "days" sliders start at 0, which is itself a valid answer ("no bad days").
+**Why:** Pre-filling "No" would quietly bias the result for anyone who skips a question. The model needs all 21
+values, and guessing missing ones would make the percentage less honest.
+
+### D-57 — "Less than 1%" and the threshold with one decimal
+**Date:** 2026-11-18
+**Decision:** Probabilities below 0.5% are shown as **"less than 1%"** (message, from `ml/risk.py`) / **"<1%"** (big
+number) and "fewer than 1 has prediabetes or diabetes", instead of "0%". On the risk bar the screening threshold is
+shown with one decimal (**15.1%**).
+**Why:** Found in the screenshots: "0%" and "about 0 of 100" suggest zero risk, which the model can't claim. With
+the threshold rounded to "15%", a person at 15.0% would be "low" right next to a "15%" mark, which looks wrong.
+
+### D-58 — README
+**Date:** 2026-11-18
+**Decision:** `README.md` explains what the project is, links to the documents, and gives the commands to set up
+the environment, run the API and UI, train a new model and run the tests.
+**Why:** With two servers to start, someone cloning the repository needs the exact commands. The README was empty.
+
+### D-59 — Local deployment with `run.py` and `start.bat`
+**Date:** 2026-11-18
+**Decision:** For now the app runs **on the user's PC**. `run.py` (project root) starts the API (`python -m api.main`)
+and the UI (`python -m ui.app`) as two child processes with the same Python, waits until both answer (API
+`/health`, UI `/`, up to 60 s each), opens the browser at http://127.0.0.1:8050, and stops both on Ctrl+C. If one
+server stops unexpectedly, the other is stopped too and the script exits with an error. Before starting, it checks
+that ports 5001 and 8050 are free ("Is the app already running?"). Options: `--no-browser`, and `--check` (start,
+check, stop; exit code 0 = OK), which `tests/test_run.py` uses. `start.bat` can be double-clicked: it looks for the
+`da-ml` environment in `%USERPROFILE%\miniconda3\envs\da-ml` (or `anaconda3`), runs `run.py`, and keeps the window
+open if something goes wrong. Flask's and Dash's built-in servers are used, bound to 127.0.0.1.
+**Why:** The team's decision: run it locally first, decide on hosting afterwards (D-60). One command (or a
+double-click) instead of two terminals makes it easy to use. The built-in servers are fine for one user on one PC;
+their "not for production" warning matters once others can reach the app, which is part of the hosting decision
+(note D-51: `gunicorn` doesn't run on Windows). `start.bat` uses the environment's `python.exe` directly because
+`conda` isn't on the PATH on this PC.
+
+### D-60 — Hosting postponed 🔶
+**Date:** 2026-11-18
+**Decision:** Where to host the app for others (Docker container, a cloud service such as Azure or Render, or
+something else) is decided **later**, after the app has been used locally.
+**Why:** The team's decision. Things to settle then: a production web server instead of the built-in ones (D-51,
+D-59), whether the API and UI run as one or two services, the UI's API address (`DA_ML_API_URL`, D-54), serving the
+Bootstrap CSS without a CDN if needed (D-53), HTTPS, and the limits in `MODEL_EXPLAINED.md` (population, EU medical
+device rules) if the public can use it.
