@@ -64,6 +64,13 @@ test ROC-AUC at least 0.80 and not more than 0.01 below the current model, and r
 - **Failed:** the model is saved (marked "not deployed"), the current model stays live, and the reasons are
   printed. Exit code 2.
 
+**Which data can be used:** a CSV with exactly the 22 columns of the Kaggle file (`Diabetes_012` and the 21
+answers, any order) and the **same answer codes** (e.g. Age 1–13 in 5-year groups, Income 1–8 in the same dollar
+ranges). The validation rejects wrong columns, missing values and out-of-range codes, but it can't notice a code
+whose *meaning* changed while staying in range. The Kaggle file is a cleaned version of the raw BRFSS 2015 survey;
+raw survey data from **other years** must first be converted to these columns and codes (some questions, e.g.
+income, changed over the years). Old and new data can be combined by putting all rows in one CSV.
+
 To go back to an earlier model, write its folder name into `models/latest.txt`; the running app switches to it too.
 The page header in the UI always shows which model is live (it updates within 10 seconds of a switch).
 
@@ -102,12 +109,15 @@ python -m flake8 --max-line-length 120 ml api ui tests
 ## Project structure
 
 ```
-data/raw_data/        Kaggle CSVs              ml/validation.py   the dataset format + input checks
-data/splits/          shared train/test split  ml/train.py        training script
-ml/notebooks/         EDA, Modeling, AutoML    ml/risk.py         risk levels and messages
-models/               trained models           api/main.py        Flask API
-tests/                pytest tests             ui/app.py          Dash web UI
+data/raw_data/        Kaggle CSVs                     ml/validation.py   the dataset format + input checks
+data/splits/          shared train/test split         ml/train.py        training + quality check + deploy
+data/store.db         data store (not in git)         ml/risk.py         risk levels and messages
+data/training_sets/   combined training data (n.i.g.) ml/store.py        data store access
+ml/notebooks/         EDA, Modeling, AutoML           ml/monitoring.py   drift report, recommendation
+models/               trained models, latest.txt      api/main.py        Flask API (port 5001)
+tests/                pytest tests                    ui/app.py          risk check (port 8050)
+run.py, start.bat     start everything                ui/dashboard.py    monitoring dashboard
 ```
 
 The AutoML notebook (`ml/notebooks/AutoML.ipynb`) uses a separate environment: `conda env create -f
-environment-automl.yml`.
+environment-automl.yml`. See [`PROJECT_PLAN.md`](PROJECT_PLAN.md) for the full structure.

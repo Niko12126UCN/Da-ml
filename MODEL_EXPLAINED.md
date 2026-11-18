@@ -1,7 +1,8 @@
 # How the Model Works
 
-How the deployed model (`models/catboost_20261118_084406/`) turns a person's survey answers into a risk percentage
-and a message, why the approach is sound, and where its limits are.
+How the model turns a person's survey answers into a risk percentage and a message, why the approach is sound,
+how the live model is monitored (section 7), and where the limits are. The worked example uses the model
+`catboost_20261118_084406`; later models trained on the same data give the same numbers.
 
 Related documents: [`PROJECT_PLAN.md`](PROJECT_PLAN.md) (plan) · [`DECISIONS.md`](DECISIONS.md) (what was decided
 and why) · [`RESULTS.md`](RESULTS.md) (all measurements) ·
@@ -165,6 +166,51 @@ These are limits of the data and the scope, not flaws in the method:
   is why the low message still mentions a doctor (D-49).
 - **One test split, no uncertainty ranges.** Scores such as ROC-AUC 0.825 come from a single 80/20 split. Ranges
   (e.g. "0.825 ± 0.004") could be added with bootstrapping if the results need formal reporting.
+- **User labels are self-reported.** The optional "Has a doctor ever told you …?" answer (D-79) has the same weakness
+  as the survey label: people with undiagnosed diabetes answer "No".
 - **Regulation.** If the tool were offered to the public beyond a study project, software that gives personal
   health-risk advice may count as a **medical device** in the EU, with formal requirements. For a project and demo
   this doesn't apply.
+
+## 7. Monitoring: how drift works without a yes/no answer
+
+Users don't tell us whether they really have diabetes (the optional question in D-79 is answered by some users,
+and only about a past diagnosis). Monitoring therefore doesn't check whether the model is **right**; it checks
+whether the model is still in **familiar territory**.
+
+### The idea
+
+The model learned from the people in the 2015 survey and is only reliable for people who look like them. Drift
+monitoring compares **how today's users answer the questions** with **how the training data answered them**, using
+the answers people stored (opt-in). Example for the age question:
+
+| Age group | Training data (2015 survey) | Users — stable | Users — drift |
+|---|---|---|---|
+| 18–39 | 22% | 21% | 5% |
+| 40–59 | 37% | 38% | 20% |
+| 60+ | 41% | 41% | **75%** |
+
+The comparison is with the data **the model was trained on** (saved per model as `reference.json`, D-73), not with
+what users usually answer. So if the users have always been different from the 2015 survey, monitoring shows drift
+from the start, which is intended: the model is outside familiar territory from day one. It judges the **overall
+pattern** of at least 100 stored predictions (D-74), never single people.
+
+### PSI
+
+The **Population Stability Index** turns the difference into one number per question: it compares the shares bin by
+bin and adds up how far apart they are (`sum((user share − training share) × ln(user share / training share))`).
+Below **0.1** stable, **0.1–0.25** watch, **0.25** and above drift. The same is done for the model's **outputs**
+(the predicted risks, compared with its predictions on the test data), which also needs no true answers.
+
+### What drift tells us, and what it can't
+
+| Drift monitoring can see | Drift monitoring can't see |
+|---|---|
+| Users differ from the training data (e.g. older, heavier, another population) | Whether a prediction is right or wrong |
+| *Which* questions changed, so what kind of new data is needed | A change in how the answers relate to diabetes (*concept drift*): if people with the same answers became more or less likely to have diabetes, the answers look the same and drift stays "stable" |
+| A change in the model's behaviour (e.g. twice as many people flagged) | |
+
+At drift, the percentages and the 80% recall may no longer hold, because they were checked on the survey population.
+That's why drift leads to **"Retraining recommended"** (D-81): retrain with labelled data that covers the shifted
+groups, i.e. the original dataset plus the stored user rows that have a diagnosis (D-80). Catching concept drift would
+need true outcomes over time, e.g. a new labelled survey or a later follow-up with users.

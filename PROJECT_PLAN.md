@@ -145,27 +145,36 @@ Mirrors the `ml-taxi-pipeline` reference project (Flask API + Dash UI):
 
 ```
 Da-ml/
-├── data/raw_data/                 # raw Kaggle CSVs                                  ✅
+├── data/
+│   ├── raw_data/                  # the three Kaggle CSVs
+│   ├── splits/train_test_split.csv  # shared 80/20 split used by the notebooks (D-32)
+│   ├── store.db                   # data store: predictions (opt-in), requests, training runs — NOT in git (D-70)
+│   └── training_sets/             # combined Kaggle + user data used for training — NOT in git (D-80)
 ├── ml/
-│   ├── notebooks/EDA.ipynb        # EDA + profiling report                           ✅
-│   ├── notebooks/Modeling.ipynb   # LR vs CatBoost vs AutoML comparison + reasoning
-│   ├── train.py                   # validate → train → save model + metrics + threshold    ✅
-│   ├── validation.py              # shared schema checks (train.py AND the API)          ✅
-│   └── risk.py                    # risk levels (low/elevated/high) + messages            ✅
-├── tests/                         # pytest: test_validation.py, test_train.py            ✅
-├── ml/monitoring.py               # drift / volume report; reference.json per model         ✅
-├── ml/store.py / data/store.db    # data store: predictions (opt-in) + training runs (not in git) ✅
-├── models/<run_id>/               # model.cbm + metadata.json per run; latest.txt = current ✅
-├── api/main.py                    # Flask: /health, /model, /predict (port 5001)           ✅
-├── ui/dashboard.py                # monitoring dashboard at /dashboard                      ✅
-├── ui/app.py                      # Dash page → calls /predict → shows risk level (port 8050) ✅
-├── run.py / start.bat             # start API + UI together on this PC                ✅
-├── environment.yml                # da-ml environment                                ✅
-├── Diabetes_Prediction_Feasibility.md                                                ✅
-├── DECISIONS.md                   # every decision: what, why, when                  ✅
-├── RESULTS.md                     # all measured results, step by step               ✅
-├── MODEL_EXPLAINED.md             # how a prediction is made, worked example, limits  ✅
-└── PROJECT_PLAN.md                # this file
+│   ├── notebooks/EDA.ipynb        # EDA + YData profiling report (Diabetes_EDA_Profile.html)
+│   ├── notebooks/Modeling.ipynb   # logistic regression vs. CatBoost, balancing, threshold (step 1)
+│   ├── notebooks/AutoML.ipynb     # AutoGluon benchmark, separate environment (step 2)
+│   ├── validation.py              # the dataset format + input checks, used by training and API (D-37)
+│   ├── train.py                   # validate → train → quality check → deploy (D-43, D-61)
+│   ├── risk.py                    # risk levels and messages (D-48, D-49)
+│   ├── store.py                   # data store access (D-70)
+│   └── monitoring.py              # drift / volume report, reference.json, recommendation (D-73 to D-81)
+├── models/<run_id>/               # model.cbm + metadata.json + reference.json per run; latest.txt = live model
+├── api/main.py                    # Flask API, port 5001: /health, /model, /predict, /monitoring
+├── ui/app.py                      # Dash web UI, port 8050: risk check at /
+├── ui/dashboard.py                # monitoring dashboard at /dashboard
+├── ui/assets/style.css            # styling
+├── tests/                         # pytest: validation, train, api, ui, store, monitoring, dashboard, loop, run
+├── run.py / start.bat             # start API + UI together on this PC (D-59)
+├── .idea/runConfigurations/       # PyCharm: "Train model", "Train model (with user data)"
+├── environment.yml                # da-ml environment
+├── environment-automl.yml         # da-ml-automl environment (AutoGluon, D-28)
+├── README.md                      # setup, run, train, monitor, test
+├── PROJECT_PLAN.md                # this file
+├── DECISIONS.md                   # every decision: what, why, when
+├── RESULTS.md                     # all measured results, step by step
+├── MODEL_EXPLAINED.md             # how a prediction and drift monitoring work, limits
+└── Diabetes_Prediction_Feasibility.md  # expectations before training; CatBoost explained
 ```
 
 - **The notebook argues, the script runs.** `Modeling.ipynb` documents *why* a model was chosen; `train.py` is the
@@ -197,6 +206,20 @@ past diagnosis, and only some users give it.
 `data/store.db` never in git.
 
 ## 9. Open questions
+
+**Still open:**
+- **Hosting for others** (D-60): Docker or a cloud service; production web server instead of the built-in ones
+  (`gunicorn` doesn't run on Windows, D-51); HTTPS; the UI's API address (`DA_ML_API_URL`, D-54); serving the
+  Bootstrap CSS without a CDN if needed (D-53).
+- **Before other people use the app** (D-69, D-67): a written research purpose, who may access the data, how a
+  deletion request is handled, secure storage, and server logs that don't keep IP addresses; whether EU medical
+  device rules apply (`MODEL_EXPLAINED.md`, limits).
+- **Lock down the dashboard** to the team when hosted (D-77).
+- **Extra weight for user rows** in training, so a few hundred labelled user rows can move the model (D-80).
+- **Recent-window drift:** drift currently uses every stored prediction since the model went live (D-74); a recent
+  window (e.g. 30 days) could be added later if older data dilutes new changes too much.
+
+**Answered:**
 
 - ~~**Deployment target:** local, Docker or hosted?~~ → **Local for now** (D-59); hosting decided later (D-60).
   Original question: local (API + UI on one machine), Docker container (Docker Desktop is installed), or hosted
