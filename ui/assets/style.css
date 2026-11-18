@@ -123,6 +123,11 @@ body {
 .dot-off { background: #9aa4af; }
 .result-model { font-size: 0.75rem; color: var(--muted); margin-top: 0.25rem; }
 
+/* opt-in for storing answers (D-68) */
+.consent { margin-top: 1.25rem; font-size: 0.85rem; color: var(--muted); }
+.consent .form-check-input { margin-top: 0.2rem; }
+.consent .form-check-input:checked { background-color: var(--accent); border-color: var(--accent); }
+
 .page-footer { color: var(--muted); font-size: 0.85rem; margin-top: 1rem; max-width: 46rem; }
 
 @media (max-width: 991px) {

@@ -280,6 +280,21 @@ catboost_20261118_100430 · trained 18 Nov 2026, 10:04 · test ROC-AUC 0.825" (t
 PyCharm "Train model" configuration). After `latest.txt` was pointed at `catboost_20261118_084406`, the page showed
 that model ("trained 18 Nov 2026, 08:44"); `latest.txt` was then set back to `catboost_20261118_100430`.
 
+## Step 9 — Data store and logging (`ml/store.py`, 2026-11-18)
+
+`python -m pytest tests`: **82 tests passed** (9 new: tables created; predictions stored with no identifying columns
+and UTC time; training runs imported once; rejected runs marked "not deployed"; unknown table names refused; the
+API stores only with `?store=true`; a broken store doesn't stop predictions; all training runs recorded; the UI only
+asks for storage when the checkbox is ticked); flake8 clean. The tests never created the real `data/store.db`.
+
+Live check with the app running on a **temporary** store (`DA_ML_STORE`, so no test data entered the real one):
+- Checkbox unticked → nothing stored; ticked → 1 row (`2026-11-18T09:21:55+00:00`, `catboost_20261118_100430`,
+  0.3323, high, source `ui`, Age 9, BMI 31, …) and the result said "your answers were stored anonymously".
+- Screenshot: the unticked checkbox sits above "Check my risk" in the result panel.
+
+Real store `data/store.db` created with the two existing training runs (`catboost_20261118_084406`,
+`catboost_20261118_100430`: test ROC-AUC 0.8247, recall 79.6%, both deployed) and 0 predictions.
+
 ## Expected vs. actual
 
 Predictions from `Diabetes_Prediction_Feasibility.md` (written before any model was trained) compared with the

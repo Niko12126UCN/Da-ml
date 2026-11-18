@@ -73,6 +73,13 @@ Newest decisions are at the bottom. If a decision is changed later, the old entr
 | D-63 | 2026-11-18 | Rejected models are kept (marked "not deployed"); unique folder names | ✅ |
 | D-64 | 2026-11-18 | PyCharm run configuration "Train model" | ✅ |
 | D-65 | 2026-11-18 | The UI shows which model is live, and which model made each result | ✅ |
+| D-66 | 2026-11-18 | Phase 2: work towards the full production pipeline (data store, monitoring, dashboard, loop) | ✅ |
+| D-67 | 2026-11-18 | Store the 21 answers + result per prediction, anonymously | ✅ |
+| D-68 | 2026-11-18 | Storing is opt-in: an unticked checkbox in the UI, `?store=true` in the API | ✅ |
+| D-69 | 2026-11-18 | Stored data is kept indefinitely, for research | ✅ |
+| D-70 | 2026-11-18 | Data store: SQLite file `data/store.db`, not committed to git | ✅ |
+| D-71 | 2026-11-18 | A data store problem never stops a prediction or a training run | ✅ |
+| D-72 | 2026-11-18 | Every training run (deployed or not) is recorded in the data store | ✅ |
 
 ---
 
@@ -720,3 +727,74 @@ reached, the label shows a grey dot and "Risk service not reachable". Each resul
 app, the label has to update by itself; 10 seconds is quick enough to see a switch and costs one tiny request per
 open page. Naming the model on each result keeps a result traceable even if the model changes while the page is
 open.
+
+### D-66 — Phase 2: towards the full production pipeline
+**Date:** 2026-11-18
+**Decision:** After comparing the project with a production-pipeline drawing (IoT data → data store → training
+pipeline → stored models → inference pipeline, with predictions, a real-time dashboard and data & model monitoring
+feeding back), the team decided to build the missing parts in four steps: **9** data store + logging, **10**
+monitoring, **11** real-time dashboard, **12** closing the loop (drift alert → "retraining recommended"; training
+reads from and writes to the store).
+**Why:** The team wants to "work towards the full model". Training, stored models and inference already matched the
+drawing; the data store, monitoring and dashboard did not exist. **Important limitation:** users never tell us
+whether they really have diabetes, so the store gets no true labels. That means live accuracy/recall can't be
+measured and logged predictions can't be used for retraining; monitoring is limited to data drift, prediction drift,
+volume and errors, and retraining still needs labelled datasets (such as the Kaggle file).
+
+### D-67 — What is stored per prediction
+**Date:** 2026-11-18
+**Decision:** For each stored prediction: time (UTC, to the second), model run ID, probability, risk level,
+flagged, source (`ui` or `api`) and the 21 validated answers (BMI as the rounded number the model used).
+**Nothing that identifies the person:** no name, no IP address, no browser or device ID, no cookie, no free text.
+**Why:** Chosen by the team. The answers are needed to monitor data drift per question (step 10); the result and
+model ID to monitor predictions per model. Note: Flask's console log still prints each request's IP address (only
+on screen, not stored); for hosting, server logs must be configured not to keep IP addresses next to the data
+(D-60).
+
+### D-68 — Opt-in consent
+**Date:** 2026-11-18
+**Decision:** The UI has an **unticked** checkbox above the button: "Help improve the model: store my answers and
+result anonymously for research (no name or IP address)." Only when it is ticked does the UI call
+`/predict?store=true&source=ui`; the result then says "your answers were stored anonymously". The API stores
+nothing unless a request explicitly asks with `?store=true` (also for other API clients).
+**Why:** Chosen by the team. The answers are health data, a special category of personal data under GDPR, so
+storing them needs explicit consent; an unticked checkbox is the clearest form. It means less data than storing
+everything, but every stored record was given willingly.
+
+### D-69 — Kept indefinitely, for research
+**Date:** 2026-11-18
+**Decision:** Stored predictions are **not deleted automatically**. The data is collected for research purposes.
+**Why:** The team's decision ("this is only for research purposes, so we don't delete the data"). GDPR allows data
+used for scientific research to be kept longer than otherwise, but expects safeguards in return. In place: no
+identifying fields (D-67), opt-in consent that names the research purpose (D-68), the database stays out of git
+(D-70). To settle before others use the app (hosting, D-60): a written description of the research purpose, who may
+access the data, how a person can ask for deletion (with anonymous records this is hard, which should be stated in
+the consent text), and secure storage on the server.
+
+### D-70 — SQLite data store, not in git
+**Date:** 2026-11-18
+**Decision:** `ml/store.py` keeps the data store in one SQLite file, `data/store.db` (another path can be set with
+the environment variable `DA_ML_STORE`, used for tests and demos). Tables: `predictions` (D-67) and `training_runs`
+(D-72), with indexes on time and model. WAL mode lets the API write while monitoring reads. `data/store.db` and its
+`-wal`/`-shm` files are in `.gitignore`.
+**Why:** SQLite needs no server, is built into Python, and is plenty for one PC; for hosting it can be replaced by a
+server database (e.g. PostgreSQL) behind the same functions. The file contains health answers of individuals, so it
+must never end up in a git repository; the team commits by hand (D-47), and `.gitignore` prevents it from being
+added by accident.
+
+### D-71 — The store never stops the app
+**Date:** 2026-11-18
+**Decision:** If writing to the data store fails, the API still returns the prediction (with `"stored": false`) and
+logs the error; `ml.train` prints a warning and still deploys the model if it passed.
+**Why:** The person's result and a good new model matter more than the record. A full disk or locked file must not
+take the screening service down.
+
+### D-72 — Training runs in the store
+**Date:** 2026-11-18
+**Decision:** After every run, `ml.train` adds all model folders that aren't in `training_runs` yet (from their
+`metadata.json`): run ID, time, data file and SHA-256, rows, threshold, test ROC-AUC / recall / precision, deployed,
+forced, failed checks. Rejected runs are included. Models from before the quality check (D-61) count as deployed.
+The two existing models were imported on 2026-11-18. `ml.train --store <path>` writes to another store.
+**Why:** The drawing's "stored models" and "historical data" live in one place, so the dashboard (step 11) can show
+the model history and which data each model was trained on. Importing from `metadata.json` keeps the model folders
+as the source of truth; the store is an index of them.

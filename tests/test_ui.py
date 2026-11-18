@@ -83,6 +83,33 @@ def test_cutoffs_are_fetched_again_when_the_model_changes(monkeypatch):
     assert ui.app.cutoffs("model_b") == (0.10, 0.30) and len(calls) == 2     # new model -> fetched again
 
 
+@pytest.mark.parametrize("consent, expected_params", [(False, {}), (True, {"store": "true", "source": "ui"})])
+def test_answers_are_only_sent_for_storage_with_consent(monkeypatch, consent, expected_params):
+    import ui.app
+    sent = {}
+
+    class FakeResponse:
+        status_code = 200
+
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"probability": 0.33, "risk_level": "high", "message": "m", "disclaimer": "d",
+                    "model": "model_a", "stored": consent}
+
+    def fake_post(url, json, params, timeout):
+        sent["params"] = params
+        return FakeResponse()
+
+    monkeypatch.setattr(ui.app.requests, "post", fake_post)
+    monkeypatch.setattr(ui.app, "cutoffs", lambda model: (0.151, 0.30))
+    values = [ANSWERS[f] for f in CHOICE_FIELDS]
+    result = ui.app.check_risk(1, *values, 175, 96, consent)
+    assert sent["params"] == expected_params
+    assert ("stored anonymously" in str(result)) == consent
+
+
 def test_render_result_and_layout_build():
     body = {"probability": 0.33, "risk_level": "high", "message": "msg", "disclaimer": "disc", "model": "model_a"}
     assert "Model: model_a" in str(render_result(body, 0.151, 0.30))

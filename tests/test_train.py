@@ -85,7 +85,8 @@ def quick_training(raw, tmp_path, monkeypatch):
             info["metrics"]["test"].update(roc_auc=roc_auc, recall=0.8)
             return model, info
         monkeypatch.setattr(ml.train, "train", fast_train)
-        return main(["--data", str(sample_csv), "--out", str(tmp_path / "models"), *flags])
+        return main(["--data", str(sample_csv), "--out", str(tmp_path / "models"),
+                     "--store", str(tmp_path / "store.db"), *flags])
 
     return run
 
@@ -116,6 +117,10 @@ def test_good_model_goes_live_and_worse_model_does_not(quick_training, tmp_path)
     assert quick_training(0.80, "--force") == 0             # forced: live
     assert latest(tmp_path) not in {first, rejected}
     assert run_metadata(tmp_path, latest(tmp_path))["quality_check"]["forced"] is True
+
+    from ml.store import read_table                         # all three runs are in the data store (D-72)
+    runs = read_table("training_runs", tmp_path / "store.db").set_index("run_id")
+    assert len(runs) == 3 and runs.loc[rejected, "deployed"] == 0 and runs.loc[first, "deployed"] == 1
 
 
 def test_runs_in_the_same_second_get_different_folders(raw, tmp_path):

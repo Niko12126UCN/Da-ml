@@ -36,6 +36,11 @@ Build a complete pipeline that can:
 | Local deployment (`run.py`, `start.bat`): runs on this PC | ✅ Done (2026-11-18) |
 | Automatic deployment: quality check + live switch without restart (`ml/train.py`, `api/main.py`) | ✅ Done (2026-11-18) |
 | Hosting for others (Docker / cloud) | ⬜ Later (D-60) |
+| **Phase 2 (D-66)** | |
+| 9. Data store + logging (`ml/store.py`, `data/store.db`; opt-in in the UI) | ✅ Done (2026-11-18) |
+| 10. Monitoring: data drift, prediction drift, volume, errors per model (`ml/monitoring.py`) | ⬜ Next |
+| 11. Real-time dashboard (`/dashboard`) | ⬜ |
+| 12. Closing the loop: drift alert → "retraining recommended"; model history | ⬜ |
 
 ## 3. Model selection approach
 
@@ -148,6 +153,7 @@ Da-ml/
 │   ├── validation.py              # shared schema checks (train.py AND the API)          ✅
 │   └── risk.py                    # risk levels (low/elevated/high) + messages            ✅
 ├── tests/                         # pytest: test_validation.py, test_train.py            ✅
+├── ml/store.py / data/store.db    # data store: predictions (opt-in) + training runs (not in git) ✅
 ├── models/<run_id>/               # model.cbm + metadata.json per run; latest.txt = current ✅
 ├── api/main.py                    # Flask: /health, /model, /predict (port 5001)           ✅
 ├── ui/app.py                      # Dash page → calls /predict → shows risk level (port 8050) ✅
@@ -162,6 +168,30 @@ Da-ml/
 
 - **The notebook argues, the script runs.** `Modeling.ipynb` documents *why* a model was chosen; `train.py` is the
   repeatable pipeline step (fixed seed, saved metrics, saved threshold).
+
+## Phase 2 — towards the full production pipeline (D-66)
+
+Target picture: a production pipeline where new data and predictions go into a **data store**, a **training pipeline**
+produces **stored models**, an **inference pipeline** serves them, and **monitoring** and a **real-time dashboard**
+watch data and model and feed back into retraining.
+
+| Drawing | Here | Status |
+|---|---|---|
+| IoT data (new data) | People using the web UI; CSV files | ✅ |
+| Data store | `data/store.db` (SQLite): stored predictions (opt-in) + training runs | ✅ step 9 |
+| Historical data → training pipeline | `python -m ml.train` (labelled CSV files) | ✅ |
+| Stored models | `models/<run_id>/`, `latest.txt`, quality check | ✅ |
+| Inference pipeline | API with automatic model switch | ✅ |
+| Predictions → data store | `/predict?store=true` (UI: opt-in checkbox) | ✅ step 9 |
+| Data & model monitoring | drift of answers vs. training data, prediction distribution, share flagged, volume, errors | ⬜ step 10 |
+| Real-time dashboard | `/dashboard` page, refreshing by itself | ⬜ step 11 |
+| Feedback into training | drift alert → "retraining recommended"; training runs in the store | ⬜ step 12 |
+
+**Limitation:** the store gets **no true labels** (users don't report a diagnosis), so live accuracy/recall can't be
+measured and stored predictions can't be used for retraining. Retraining needs labelled datasets.
+
+**Privacy (D-67 to D-70):** only with opt-in consent; no identifying fields; kept indefinitely for research;
+`data/store.db` never in git.
 
 ## 9. Open questions
 

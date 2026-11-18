@@ -44,6 +44,29 @@ def test_api_switches_to_a_new_model_without_restart(two_models):
     assert client.post("/predict", json=PERSON).get_json()["model"] == "model_b"
 
 
+def test_predictions_are_stored_only_when_asked(tmp_path):
+    from ml.store import read_table
+    store = tmp_path / "store.db"
+    client = create_app(store_path=store).test_client()
+
+    assert client.post("/predict", json=PERSON).get_json()["stored"] is False
+    assert not store.exists()                                          # nothing written without ?store=true
+
+    body = client.post("/predict?store=true&source=ui", json=PERSON).get_json()
+    assert body["stored"] is True
+    client.post("/predict?store=true", json=[PERSON, LOW_RISK_PERSON])
+    df = read_table("predictions", store)
+    assert list(df["source"]) == ["ui", "api", "api"]
+    assert df["probability"].iloc[0] == body["probability"]
+
+
+def test_a_broken_store_does_not_stop_predictions(tmp_path):
+    broken = tmp_path / "not_a_database"
+    broken.mkdir()                                                     # a folder can't be opened as a database
+    response = create_app(store_path=broken).test_client().post("/predict?store=true", json=PERSON)
+    assert response.status_code == 200 and response.get_json()["stored"] is False
+
+
 def test_api_keeps_serving_if_the_new_model_is_broken(two_models):
     client = create_app(two_models).test_client()
     activate(two_models, "model_missing")               # latest.txt names a model that can't be loaded

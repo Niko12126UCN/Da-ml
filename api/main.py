@@ -4,6 +4,8 @@ Serves the model named in models/latest.txt:
     GET  /health   -> status and which model is loaded
     GET  /model    -> features, allowed ranges, threshold, risk levels and the model's test metrics
     POST /predict  -> risk for one person (JSON object) or several people (JSON list of objects)
+                      add ?store=true to store the answers and results anonymously in the data store (opt-in, D-68),
+                      and ?source=ui when the request comes from the web UI
 
 When training switches models/latest.txt to a new model, the API loads it and switches over by itself, without a
 restart (D-62). If the new model can't be loaded, the current one keeps serving and the error is logged.
@@ -21,6 +23,7 @@ from catboost import CatBoostClassifier
 from flask import Flask, jsonify, request
 
 from ml.risk import DISCLAIMER, HIGH_RISK, assess
+from ml.store import DEFAULT_STORE, log_predictions
 from ml.validation import FEATURE_COLUMNS, FEATURE_RANGES, ValidationError, validate_features
 
 MODELS_DIR = Path(__file__).resolve().parents[1] / "models"
@@ -74,7 +77,7 @@ class ModelStore:
         return self._current
 
 
-def create_app(models_dir=MODELS_DIR):
+def create_app(models_dir=MODELS_DIR, store_path=DEFAULT_STORE):
     store = ModelStore(models_dir)
     app = Flask(__name__)
 
@@ -114,7 +117,14 @@ def create_app(models_dir=MODELS_DIR):
 
         model, metadata = store.get()
         results = [assess(p, metadata["threshold"]) for p in model.predict_proba(X)[:, 1]]
-        body = {"model": metadata["run_id"]}
+        body = {"model": metadata["run_id"], "stored": False}
+        if request.args.get("store") == "true":
+            source = "ui" if request.args.get("source") == "ui" else "api"
+            try:
+                log_predictions(X, results, metadata["run_id"], source, store_path)
+                body["stored"] = True
+            except Exception:   # the data store must never stop a prediction (D-71)
+                log.exception("Could not store the prediction in %s", store_path)
         if isinstance(data, list):
             body["results"] = results
         else:

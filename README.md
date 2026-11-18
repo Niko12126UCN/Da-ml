@@ -66,6 +66,14 @@ test ROC-AUC at least 0.80 and not more than 0.01 below the current model, and r
 To go back to an earlier model, write its folder name into `models/latest.txt`; the running app switches to it too.
 The page header in the UI always shows which model is live (it updates within 10 seconds of a switch).
 
+## Data store
+
+`data/store.db` (SQLite) records every training run, and the answers + result of every person who ticks **"Help
+improve the model: store my answers … anonymously"** in the UI (opt-in; nothing is stored otherwise). No name, IP
+address or browser ID is stored. The file contains health data and is **never committed** (it is in `.gitignore`).
+Other API clients can ask for storage with `POST /predict?store=true`. To use another file, set the environment
+variable `DA_ML_STORE`.
+
 ## Tests
 
 ```

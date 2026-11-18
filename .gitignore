@@ -225,3 +225,7 @@ catboost_info/
 # AutoGluon models (large, reproducible from AutoML.ipynb)
 models/autogluon_benchmark/
 AutogluonModels/
+
+# Data store: health answers of individuals, never committed (D-70)
+data/store.db
+data/store.db-*

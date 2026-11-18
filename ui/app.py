@@ -163,6 +163,9 @@ def layout():
             dbc.Col(html.Div([
                 dbc.Card(dbc.CardBody([
                     html.Div(id="result", children=result_placeholder()),
+                    dbc.Checkbox(id="consent", value=False, className="consent",
+                                 label="Help improve the model: store my answers and result anonymously for research "
+                                       "(no name or IP address)."),
                     dbc.Button("Check my risk", id="submit", className="submit", size="lg"),
                 ]), className="result-card"),
             ], className="sticky"), lg=5),
@@ -200,6 +203,7 @@ def render_result(body, threshold, high_risk):
     level = body["risk_level"]
     probability = body["probability"]
     very_low = probability < 0.005
+    stored_note = " · your answers were stored anonymously" if body.get("stored") else ""
     return html.Div([
         html.Div("Your result", className="result-kicker"),
         html.Div([html.Span("<1%" if very_low else f"{probability:.0%}", className="result-number"),
@@ -216,7 +220,7 @@ def render_result(body, threshold, high_risk):
         html.P("Of 100 people with answers like yours, " + ("fewer than 1 has" if very_low else
                f"about {round(probability * 100)} have") + " prediabetes or diabetes.", className="muted"),
         html.P(body["disclaimer"], className="disclaimer"),
-        html.Div(f"Model: {body['model']}", className="result-model"),
+        html.Div(f"Model: {body['model']}" + stored_note, className="result-model"),
     ])
 
 
@@ -258,15 +262,18 @@ def show_bmi(height_cm, weight_kg):
 
 
 @app.callback(Output("result", "children"), Input("submit", "n_clicks"),
-              [State(field, "value") for field in CHOICE_FIELDS] + [State("height", "value"), State("weight", "value")],
+              [State(field, "value") for field in CHOICE_FIELDS]
+              + [State("height", "value"), State("weight", "value"), State("consent", "value")],
               prevent_initial_call=True)
 def check_risk(_, *values):
-    answers = dict(zip(CHOICE_FIELDS, values[:-2]))
-    payload, missing = build_payload(answers, *values[-2:])
+    answers = dict(zip(CHOICE_FIELDS, values[:-3]))
+    height_cm, weight_kg, consent = values[-3:]
+    payload, missing = build_payload(answers, height_cm, weight_kg)
     if missing:
         return render_problems("Please answer every question:", missing)
+    params = {"store": "true", "source": "ui"} if consent else {}   # stored only with consent (D-68)
     try:
-        response = requests.post(f"{API_BASE}/predict", json=payload, timeout=10)
+        response = requests.post(f"{API_BASE}/predict", json=payload, params=params, timeout=10)
         if response.status_code == 400:
             return render_problems("Some answers could not be used:",
                                    [friendly_error(e, payload) for e in response.json()["errors"]])

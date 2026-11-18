@@ -30,6 +30,7 @@ from sklearn.metrics import (accuracy_score, average_precision_score, brier_scor
                              precision_recall_curve, precision_score, recall_score, roc_auc_score)
 from sklearn.model_selection import StratifiedKFold, train_test_split
 
+from ml.store import DEFAULT_STORE, import_training_runs
 from ml.validation import FEATURE_COLUMNS, FEATURE_RANGES, TARGET_COLUMN, validate_training_data
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -192,6 +193,8 @@ def main(argv=None):
     parser.add_argument("--data", default=DEFAULT_DATA, help="CSV in the BRFSS 2015 Diabetes_012 format")
     parser.add_argument("--out", default=DEFAULT_OUT, help="folder for trained models (default: models/)")
     parser.add_argument("--force", action="store_true", help="make the new model live even if the check fails")
+    parser.add_argument("--store", default=DEFAULT_STORE, help="data store where the run is recorded "
+                                                               "(default: data/store.db)")
     args = parser.parse_args(argv)
 
     print(f"Reading {args.data}")
@@ -210,6 +213,10 @@ def main(argv=None):
 
     if failures:
         print("\nQuality check FAILED:\n- " + "\n- ".join(failures))
+    try:   # record the run (deployed or not) in the data store (D-72); a store problem must not fail training
+        import_training_runs(args.out, args.store)
+    except Exception as e:
+        print(f"Warning: could not record the run in the data store {args.store}: {e}")
     if go_live:
         activate(args.out, run_dir.name)
         print(f"\nNow live: {run_dir.name}" + (" (forced)" if failures else "")
