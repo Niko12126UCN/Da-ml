@@ -3,6 +3,7 @@
 Serves the model named in models/latest.txt:
     GET  /health   -> status and which model is loaded
     GET  /model    -> features, allowed ranges, threshold, risk levels and the model's test metrics
+    GET  /monitoring -> drift report, requests per day and model history for the dashboard (aggregates only)
     POST /predict  -> risk for one person (JSON object) or several people (JSON list of objects)
                       add ?store=true to store the answers and results anonymously in the data store (opt-in, D-68),
                       and ?source=ui when the request comes from the web UI
@@ -22,6 +23,7 @@ from pathlib import Path
 from catboost import CatBoostClassifier
 from flask import Flask, jsonify, request
 
+from ml.monitoring import dashboard_data
 from ml.risk import DISCLAIMER, HIGH_RISK, assess
 from ml.store import DEFAULT_STORE, log_predictions, log_request
 from ml.validation import FEATURE_COLUMNS, FEATURE_RANGES, ValidationError, validate_features
@@ -102,6 +104,12 @@ def create_app(models_dir=MODELS_DIR, store_path=DEFAULT_STORE):
             test_metrics=metadata["metrics"]["test"],
             disclaimer=DISCLAIMER,
         )
+
+    @app.get("/monitoring")
+    def monitoring():
+        """Monitoring report, requests per day and model history for the dashboard (D-77). Aggregates only."""
+        store.get()   # switch first if a new model went live, so the report is about the live model
+        return jsonify(dashboard_data(store_path, models_dir))
 
     @app.post("/predict")
     def predict():

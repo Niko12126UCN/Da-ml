@@ -84,6 +84,8 @@ Newest decisions are at the bottom. If a decision is changed later, the old entr
 | D-74 | 2026-11-18 | Drift: PSI ≥ 0.1 "watch", ≥ 0.25 "drift"; at least 100 stored predictions; all stored predictions of the live model | ✅ |
 | D-75 | 2026-11-18 | Every `/predict` request is counted (no answers) for volume and error monitoring | ✅ |
 | D-76 | 2026-11-18 | Tests can never write to the real data store (`tests/conftest.py`) | ✅ |
+| D-77 | 2026-11-18 | Dashboard at `/dashboard` in the web UI, fed by the API's `/monitoring`, refreshed every 10 s | ✅ |
+| D-78 | 2026-11-18 | Dashboard charts follow the dataviz method; colours checked with its validator | ✅ |
 
 ---
 
@@ -853,3 +855,39 @@ store too.
 **Why:** Found while building step 10: with request counting, the existing API tests counted 1 test request into the
 real `data/store.db` (it was deleted). The real store holds research data (D-69); test data must never mix with it.
 After a full test run the real store was checked: 0 predictions, 0 requests, 2 training runs.
+
+### D-77 — Real-time dashboard
+**Date:** 2026-11-18
+**Decision:** The web UI has a second page, **http://127.0.0.1:8050/dashboard** (`ui/dashboard.py`), with a slim
+navigation bar ("Risk check · Monitoring") on both pages. It shows:
+- the overall status badge (stable / watch / drift / not enough data / no reference) and the live model,
+- six key numbers: requests in the last 24 h (and 7 days), total requests and people predicted, error rate, share
+  opted in, stored predictions vs. the minimum of 100, mean risk vs. the reference,
+- **Data drift per question:** PSI as bars, largest first, with the 0.1 / 0.25 thresholds as reference lines,
+- **Predictions:** share per risk level, live users vs. the training reference, plus prediction PSI and share flagged,
+- **Requests per day** for the last 30 days, OK and invalid stacked,
+- **Model history:** every training run (newest first) with data file, test ROC-AUC / recall / precision, and
+  "live" / "yes" / "yes (forced)" / "no: <reason>".
+It gets everything from one new API endpoint, `GET /monitoring` (`ml.monitoring.dashboard_data`), and refreshes every
+**10 seconds** (`REFRESH_SECONDS`). Without enough data it explains what's missing instead of drawing empty charts;
+without the API it says so. Only aggregates are sent and shown, never individual answers.
+**Why:** The "real-time dashboard" and "data & model monitoring" boxes of the target picture (D-66). Keeping it in the
+same app and style means one thing to start (`start.bat`) and one look. Going through the API keeps the UI free of
+data-store access (D-54). 10 seconds matches the model label (D-65). For hosting (D-60): the dashboard should then be
+restricted to the team, since usage numbers are internal.
+
+### D-78 — Chart design
+**Date:** 2026-11-18
+**Decision:** The charts follow the dataviz skill's method:
+- one colour for the drift bars, because the bar length is the information; status is written as text, and only
+  questions at "watch" or "drift" get a direct value label;
+- **live users = blue `#2a78d6`, training reference = orange `#eb6834`** (palette slots 1 and 2); **OK = blue,
+  invalid = red `#d03b3b`** (the reserved "critical" status colour, because invalid input is a status);
+- one axis per chart, thin marks with rounded data ends, a white gap between stacked segments, hairline grid, legend
+  for every two-series chart, hover tooltips;
+- every chart has a **"Show as table"** twin, so no value depends on hover or colour;
+- single numbers (mean risk, share flagged, volume) are tiles, not charts.
+The colour pairs were checked with the skill's validator against the white card surface: blue/orange and blue/red
+**pass all checks**. A grey reference colour was tried first and **failed** (too little chroma, 2.13:1 contrast).
+**Why:** Charts that can be read correctly by everyone, including colour-blind readers, and that look like one
+system. The app has no dark mode, so the charts are light only.

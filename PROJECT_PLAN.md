@@ -39,8 +39,8 @@ Build a complete pipeline that can:
 | **Phase 2 (D-66)** | |
 | 9. Data store + logging (`ml/store.py`, `data/store.db`; opt-in in the UI) | ✅ Done (2026-11-18) |
 | 10. Monitoring: data drift, prediction drift, volume, errors per model (`ml/monitoring.py`) | ✅ Done (2026-11-18) |
-| 11. Real-time dashboard (`/dashboard`) | ⬜ Next |
-| 12. Closing the loop: drift alert → "retraining recommended"; model history | ⬜ |
+| 11. Real-time dashboard (`/dashboard`, API `/monitoring`) | ✅ Done (2026-11-18) |
+| 12. Closing the loop: drift alert → "retraining recommended" | ⬜ Next |
 
 ## 3. Model selection approach
 
@@ -157,6 +157,7 @@ Da-ml/
 ├── ml/store.py / data/store.db    # data store: predictions (opt-in) + training runs (not in git) ✅
 ├── models/<run_id>/               # model.cbm + metadata.json per run; latest.txt = current ✅
 ├── api/main.py                    # Flask: /health, /model, /predict (port 5001)           ✅
+├── ui/dashboard.py                # monitoring dashboard at /dashboard                      ✅
 ├── ui/app.py                      # Dash page → calls /predict → shows risk level (port 8050) ✅
 ├── run.py / start.bat             # start API + UI together on this PC                ✅
 ├── environment.yml                # da-ml environment                                ✅
@@ -185,7 +186,7 @@ watch data and model and feed back into retraining.
 | Inference pipeline | API with automatic model switch | ✅ |
 | Predictions → data store | `/predict?store=true` (UI: opt-in checkbox) | ✅ step 9 |
 | Data & model monitoring | PSI drift of answers vs. training data, prediction drift, share flagged, volume, errors (`python -m ml.monitoring`) | ✅ step 10 |
-| Real-time dashboard | `/dashboard` page, refreshing by itself | ⬜ step 11 |
+| Real-time dashboard | http://127.0.0.1:8050/dashboard, refreshes every 10 s | ✅ step 11 |
 | Feedback into training | drift alert → "retraining recommended"; training runs in the store | ⬜ step 12 |
 
 **Limitation:** the store gets **no true labels** (users don't report a diagnosis), so live accuracy/recall can't be

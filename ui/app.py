@@ -5,7 +5,7 @@ risk level, percentage, message and disclaimer. The UI holds no model logic; cut
 
 Run from the project root, in the da-ml environment (the API must be running too):
     python -m api.main
-    python -m ui.app        -> http://127.0.0.1:8050
+    python -m ui.app        -> http://127.0.0.1:8050 (risk check), http://127.0.0.1:8050/dashboard (monitoring)
 """
 
 import os
@@ -14,6 +14,8 @@ from datetime import datetime
 import dash_bootstrap_components as dbc
 import requests
 from dash import Dash, Input, Output, State, dcc, html
+
+from ui import dashboard
 
 API_BASE = os.environ.get("DA_ML_API_URL", "http://127.0.0.1:5001")   # D-54
 HOST, PORT = "127.0.0.1", 8050                                          # same as the taxi project (D-54)
@@ -242,8 +244,22 @@ def render_problems(title, problems):
 # --- app ---
 
 app = Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP], title="Diabetes risk check",
-           meta_tags=[{"name": "viewport", "content": "width=device-width, initial-scale=1"}])
-app.layout = layout
+           meta_tags=[{"name": "viewport", "content": "width=device-width, initial-scale=1"}],
+           suppress_callback_exceptions=True)   # each page's components only exist while that page is shown
+app.layout = html.Div([
+    dcc.Location(id="url"),
+    html.Nav(dbc.Container([dcc.Link("Risk check", href="/", className="nav-link-item"),
+                            dcc.Link("Monitoring", href="/dashboard", className="nav-link-item")],
+                           className="topnav-inner"), className="topnav"),
+    html.Div(id="page"),
+])
+dashboard.register(app, API_BASE)
+
+
+@app.callback(Output("page", "children"), Input("url", "pathname"))
+def show_page(pathname):
+    """/ = the risk check, /dashboard = monitoring (D-77)."""
+    return dashboard.layout() if pathname == "/dashboard" else layout()
 
 
 @app.callback(Output("model-label", "children"), Input("model-poll", "n_intervals"))

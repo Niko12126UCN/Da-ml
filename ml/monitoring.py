@@ -180,6 +180,42 @@ def report(store_path=DEFAULT_STORE, models_dir=MODELS_DIR):
     return result
 
 
+def daily_requests(store_path=DEFAULT_STORE, days=30, now=None):
+    """Requests per day (UTC) for the last `days` days, split into OK and invalid. Days without requests count 0."""
+    requests = read_table("requests", store_path)
+    now = now or datetime.now(timezone.utc)
+    index = pd.date_range(end=now.date(), periods=days, freq="D").date
+    if requests.empty:
+        counts = pd.DataFrame(0, index=index, columns=["ok", "invalid"])
+    else:
+        day = pd.to_datetime(requests["created_at"], utc=True).dt.date
+        ok = requests["status"] == 200
+        counts = pd.DataFrame({"ok": ok.groupby(day).sum(), "invalid": (~ok).groupby(day).sum()})
+        counts = counts.reindex(index, fill_value=0)
+    return [{"date": str(d), "ok": int(r.ok), "invalid": int(r.invalid)} for d, r in counts.iterrows()]
+
+
+def model_history(store_path=DEFAULT_STORE, models_dir=MODELS_DIR):
+    """All training runs from the store, newest first, with the live one marked."""
+    runs = read_table("training_runs", store_path)
+    if runs.empty:
+        return []
+    live = live_model(models_dir)[0]
+    runs = runs.sort_values("created_at", ascending=False)
+    return [{"run_id": r.run_id, "created_at": r.created_at, "data_file": r.data_file,
+             "test_roc_auc": r.test_roc_auc, "test_recall": r.test_recall, "test_precision": r.test_precision,
+             "deployed": bool(r.deployed), "forced": bool(r.forced), "failures": json.loads(r.failures or "[]"),
+             "live": r.run_id == live} for r in runs.itertuples()]
+
+
+def dashboard_data(store_path=DEFAULT_STORE, models_dir=MODELS_DIR):
+    """Everything the dashboard shows, in one call (aggregates only, never individual answers)."""
+    return {"report": report(store_path, models_dir), "daily_requests": daily_requests(store_path),
+            "model_history": model_history(store_path, models_dir),
+            "thresholds": {"watch": PSI_WATCH, "drift": PSI_DRIFT, "min_predictions": MIN_PREDICTIONS},
+            "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds")}
+
+
 # --- reference for existing models ---
 
 def build_reference_for_existing(run_id, data_path, models_dir=MODELS_DIR):

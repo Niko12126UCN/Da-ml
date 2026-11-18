@@ -322,6 +322,26 @@ Simulation on a temporary store (300 stored predictions, 312 requests incl. 12 i
 **Finding:** monitoring separates a normal user group from a shifted one, points at the questions that changed, and
 shows the effect on the predictions (twice as many people flagged).
 
+## Step 11 — Real-time dashboard (`ui/dashboard.py`, `/monitoring`, 2026-11-18)
+
+`python -m pytest tests`: **100 tests passed** (8 new: `/monitoring` on an empty store and with data, aggregates
+only; the page renders "not enough data", "drift", "stable" and "no reference"; the model history marks the live
+model and shows why a model was rejected; "no connection" when the API is down; routing `/` and `/dashboard`);
+flake8 clean. Real store unchanged after the tests.
+
+Colour check (dataviz validator, light, white surface): blue `#2a78d6` + orange `#eb6834` → all checks pass (CVD
+ΔE 24.7, normal-vision ΔE 33.6, contrast ≥ 3:1); blue + red `#d03b3b` → all pass; blue + grey `#b4b2a9` → **fail**
+(chroma 0.013, contrast 2.13:1), so grey was not used.
+
+Visual check on a **temporary demo store** (743 requests over 14 days, 5% invalid, 43% opted in):
+- 400 stored predictions, a third of the users 2–4 age groups older → **Watch** (Age PSI 0.112, predictions stable,
+  PSI 0.037, flagged 38.2% vs. 38.0%): the early warning before the predictions change.
+- plus 250 users aged 75–79 with BMI ≥ 34 → **Drift** (Age 0.993, BMI 0.590; prediction PSI 0.156 "watch"; mean risk
+  20.3% vs. 15.7%; flagged 52.9% vs. 38.0%).
+- Screenshots at 1280 px and 760 px. Fixed after looking at them: table font, line breaks in the model history,
+  legend order, gaps between stacked segments, white dashes on empty days, overlapping threshold labels, tile
+  spacing.
+
 ## Expected vs. actual
 
 Predictions from `Diabetes_Prediction_Feasibility.md` (written before any model was trained) compared with the

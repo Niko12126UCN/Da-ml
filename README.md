@@ -76,6 +76,9 @@ variable `DA_ML_STORE`.
 
 ## Monitoring
 
+The **dashboard** is at **http://127.0.0.1:8050/dashboard** (or "Monitoring" in the top bar) while the app is
+running. It refreshes every 10 seconds. The same report in the terminal:
+
 ```
 python -m ml.monitoring
 ```
