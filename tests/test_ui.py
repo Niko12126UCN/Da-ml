@@ -84,6 +84,14 @@ def test_cutoffs_are_fetched_again_when_the_model_changes(monkeypatch):
 
 
 def test_render_result_and_layout_build():
-    body = {"probability": 0.33, "risk_level": "high", "message": "msg", "disclaimer": "disc"}
-    assert render_result(body, 0.151, 0.30) is not None
+    body = {"probability": 0.33, "risk_level": "high", "message": "msg", "disclaimer": "disc", "model": "model_a"}
+    assert "Model: model_a" in str(render_result(body, 0.151, 0.30))
     assert layout() is not None
+
+
+def test_model_label():
+    from ui.app import model_label
+    info = create_app().test_client().get("/model").get_json()
+    text = str(model_label(info))
+    assert info["model"] in text and "trained" in text and "ROC-AUC 0.8" in text
+    assert "not reachable" in str(model_label(None))

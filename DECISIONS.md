@@ -72,6 +72,7 @@ Newest decisions are at the bottom. If a decision is changed later, the old entr
 | D-62 | 2026-11-18 | The running app switches to a new live model by itself (no restart) | ✅ |
 | D-63 | 2026-11-18 | Rejected models are kept (marked "not deployed"); unique folder names | ✅ |
 | D-64 | 2026-11-18 | PyCharm run configuration "Train model" | ✅ |
+| D-65 | 2026-11-18 | The UI shows which model is live, and which model made each result | ✅ |
 
 ---
 
@@ -706,3 +707,16 @@ Configurations… → Train model → Parameters**.
 **Why:** The team asked for a PyCharm command for now, pointing at the same file used so far. Run configurations in
 `.idea/runConfigurations/` can be committed, so the command comes with the repository. The path is written out
 (even though it's the script's default) so it's obvious where to change it.
+
+### D-65 — Live model label in the UI
+**Date:** 2026-11-18
+**Decision:** The page header shows a small label with the live model: a green dot, the model's run ID, when it was
+trained, and its test ROC-AUC (e.g. "Model catboost_20261118_100430 · trained 18 Nov 2026, 10:04 · test ROC-AUC
+0.825"). The UI asks the API's `/model` for it when the page loads and then every **10 seconds**
+(`MODEL_POLL_SECONDS`), so the label follows a model switch (D-62) without reloading the page. If the API can't be
+reached, the label shows a grey dot and "Risk service not reachable". Each result also says which model produced it
+("Model: …", small, under the disclaimer). `/model` now also returns the model's training time (`created`).
+**Why:** The team asked for a way to see which model is running. Since training switches the model in the running
+app, the label has to update by itself; 10 seconds is quick enough to see a switch and costs one tiny request per
+open page. Naming the model on each result keeps a result traceable even if the model changes while the page is
+open.

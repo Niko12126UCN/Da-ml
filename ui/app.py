@@ -9,6 +9,7 @@ Run from the project root, in the da-ml environment (the API must be running too
 """
 
 import os
+from datetime import datetime
 
 import dash_bootstrap_components as dbc
 import requests
@@ -16,6 +17,7 @@ from dash import Dash, Input, Output, State, dcc, html
 
 API_BASE = os.environ.get("DA_ML_API_URL", "http://127.0.0.1:5001")   # D-54
 HOST, PORT = "127.0.0.1", 8050                                          # same as the taxi project (D-54)
+MODEL_POLL_SECONDS = 10                                                 # how often the model label is refreshed (D-65)
 YES_NO = [{"label": "Yes", "value": 1}, {"label": "No", "value": 0}]
 INCOME_LABELS = ["Less than $10,000", "$10,000–15,000", "$15,000–20,000", "$20,000–25,000", "$25,000–35,000",
                  "$35,000–50,000", "$50,000–75,000", "$75,000 or more"]
@@ -134,9 +136,23 @@ def result_placeholder():
     ])
 
 
+def model_label(info):
+    """Small label with the live model (D-65). `info` is the API's /model answer, or None if it isn't reachable."""
+    if info is None:
+        return [html.Span(className="dot dot-off"), "Risk service not reachable"]
+    parts = [html.Span(className="dot dot-on"), "Model ", html.Strong(info["model"])]
+    if info.get("created"):
+        parts.append(" · trained " + datetime.fromisoformat(info["created"]).strftime("%d %b %Y, %H:%M"))
+    if info.get("test_metrics"):
+        parts.append(f" · test ROC-AUC {info['test_metrics']['roc_auc']:.3f}")
+    return parts
+
+
 def layout():
     return dbc.Container([
         html.Header([
+            html.Div(id="model-label", className="model-label", children=model_label(None)),
+            dcc.Interval(id="model-poll", interval=MODEL_POLL_SECONDS * 1000),
             html.H1("Diabetes risk check"),
             html.P("21 short questions about your health and lifestyle. You get an estimate of your risk of "
                    "prediabetes or diabetes, and whether it's worth talking to your doctor. This is not a diagnosis.",
@@ -200,6 +216,7 @@ def render_result(body, threshold, high_risk):
         html.P("Of 100 people with answers like yours, " + ("fewer than 1 has" if very_low else
                f"about {round(probability * 100)} have") + " prediabetes or diabetes.", className="muted"),
         html.P(body["disclaimer"], className="disclaimer"),
+        html.Div(f"Model: {body['model']}", className="result-model"),
     ])
 
 
@@ -223,6 +240,15 @@ def render_problems(title, problems):
 app = Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP], title="Diabetes risk check",
            meta_tags=[{"name": "viewport", "content": "width=device-width, initial-scale=1"}])
 app.layout = layout
+
+
+@app.callback(Output("model-label", "children"), Input("model-poll", "n_intervals"))
+def show_model(_):
+    """Runs when the page loads and then every MODEL_POLL_SECONDS, so the label follows a model switch."""
+    try:
+        return model_label(requests.get(f"{API_BASE}/model", timeout=3).json())
+    except (requests.RequestException, ValueError):
+        return model_label(None)
 
 
 @app.callback(Output("bmi-text", "children"), Input("height", "value"), Input("weight", "value"))

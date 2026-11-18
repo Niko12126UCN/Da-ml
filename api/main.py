@@ -88,6 +88,7 @@ def create_app(models_dir=MODELS_DIR):
         threshold = metadata["threshold"]
         return jsonify(
             model=metadata["run_id"],
+            created=metadata.get("created"),
             purpose=metadata["purpose"],
             features=FEATURE_COLUMNS,
             feature_ranges=FEATURE_RANGES,

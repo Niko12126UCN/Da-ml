@@ -111,6 +111,18 @@ body {
 }
 .submit:hover { background: #1d4ed8; border-color: #1d4ed8; }
 
+/* live model label (D-65) */
+.model-label {
+  display: inline-flex; align-items: center; gap: 0.25rem; flex-wrap: wrap;
+  font-size: 0.8rem; color: var(--muted); background: var(--card);
+  border: 1px solid var(--line); border-radius: 999px; padding: 0.25rem 0.75rem; margin-bottom: 0.9rem;
+}
+.model-label strong { color: var(--text); font-weight: 600; }
+.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 0.3rem; }
+.dot-on { background: var(--low); }
+.dot-off { background: #9aa4af; }
+.result-model { font-size: 0.75rem; color: var(--muted); margin-top: 0.25rem; }
+
 .page-footer { color: var(--muted); font-size: 0.85rem; margin-top: 1rem; max-width: 46rem; }
 
 @media (max-width: 991px) {

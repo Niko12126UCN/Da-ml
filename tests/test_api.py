@@ -81,6 +81,7 @@ def test_model_info(client):
     assert body["feature_ranges"]["Age"] == [1, 13]
     assert 0 < body["threshold"] < body["high_risk"] == HIGH_RISK
     assert body["test_metrics"]["roc_auc"] > 0.8
+    assert body["created"].startswith("20")
 
 
 def test_predict_one_person(client):

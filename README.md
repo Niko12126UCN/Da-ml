@@ -64,6 +64,7 @@ test ROC-AUC at least 0.80 and not more than 0.01 below the current model, and r
   printed. Exit code 2.
 
 To go back to an earlier model, write its folder name into `models/latest.txt`; the running app switches to it too.
+The page header in the UI always shows which model is live (it updates within 10 seconds of a switch).
 
 ## Tests
 

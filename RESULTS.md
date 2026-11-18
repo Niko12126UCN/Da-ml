@@ -273,6 +273,13 @@ Live check with the app running (`python run.py --no-browser`):
 Afterwards `models/latest.txt` was set back to `catboost_20261118_084406` and the demo model folder deleted, so the
 repository is unchanged.
 
+### Live model label in the UI (D-65)
+
+`python -m pytest tests`: **73 tests passed**; flake8 clean. With the app running, the header showed "Model
+catboost_20261118_100430 · trained 18 Nov 2026, 10:04 · test ROC-AUC 0.825" (the model trained by the team with the
+PyCharm "Train model" configuration). After `latest.txt` was pointed at `catboost_20261118_084406`, the page showed
+that model ("trained 18 Nov 2026, 08:44"); `latest.txt` was then set back to `catboost_20261118_100430`.
+
 ## Expected vs. actual
 
 Predictions from `Diabetes_Prediction_Feasibility.md` (written before any model was trained) compared with the
