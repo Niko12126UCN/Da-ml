@@ -49,6 +49,7 @@ trained model (`models/latest.txt` names it), so no training is needed first.
 python -m ml.train                            # the Kaggle CSV in data/raw_data/
 python -m ml.train --data path/to/file.csv    # any CSV in the same Diabetes_012 format
 python -m ml.train --data ... --force         # deploy even if the quality check fails
+python -m ml.train --with-user-data           # + every stored user row with a diagnosis ("Has a doctor ...")
 ```
 
 In PyCharm: choose **Train model** in the run menu (top right) and press ▶. To use another file, change the
@@ -71,7 +72,9 @@ The page header in the UI always shows which model is live (it updates within 10
 `data/store.db` (SQLite) records every training run, and the answers + result of every person who ticks **"Help
 improve the model: store my answers … anonymously"** in the UI (opt-in; nothing is stored otherwise). No name, IP
 address or browser ID is stored. The file contains health data and is **never committed** (it is in `.gitignore`).
-Other API clients can ask for storage with `POST /predict?store=true`. To use another file, set the environment
+People can also answer the optional question "Has a doctor ever told you that you have diabetes or prediabetes?";
+it is stored only with the same consent, is not used for the prediction, and is the label that makes their row
+usable for retraining (`--with-user-data`). Other API clients can ask for storage with `POST /predict?store=true`. To use another file, set the environment
 variable `DA_ML_STORE`.
 
 ## Monitoring
@@ -85,7 +88,8 @@ python -m ml.monitoring
 
 Shows the live model's request volume and error rate, and compares the stored answers (opt-in) with the data the
 model was trained on: per question and for the predictions, PSI < 0.1 is stable, 0.1–0.25 "watch", ≥ 0.25 "drift".
-At least 100 stored predictions of the live model are needed. Each model has a `reference.json` for this; for a model
+At least 100 stored predictions of the live model are needed. At **drift** the dashboard and the report say **"Retraining recommended"**, with the
+reasons and the command; `python -m ml.monitoring --check` exits with code 3 in that case (for a scheduled task). Each model has a `reference.json` for this; for a model
 without one: `python -m ml.monitoring --build-reference <run_id> --data <csv it was trained on>`.
 
 ## Tests

@@ -131,6 +131,24 @@ def section(title, questions):
     return dbc.Card(dbc.CardBody([html.H2(title, className="section-title"), *items]), className="section")
 
 
+DIAGNOSIS_OPTIONS = [{"label": "No", "value": 0}, {"label": "Prediabetes", "value": 1},
+                     {"label": "Diabetes", "value": 2}, {"label": "Prefer not to say", "value": "skip"}]
+
+
+def research_question():
+    """Optional label for retraining (D-79): stored only with consent, never used for the prediction."""
+    return dbc.Card(dbc.CardBody([
+        html.H2("For research (optional)", className="section-title"),
+        html.Div([html.Div("Has a doctor ever told you that you have diabetes or prediabetes?",
+                           className="question-label"),
+                  dbc.RadioItems(id="diagnosis", options=DIAGNOSIS_OPTIONS, value=None, inline=True,
+                                 className="choice", inputClassName="btn-check", labelClassName="btn btn-choice",
+                                 labelCheckedClassName="active"),
+                  html.Div("Not used for your result. Only stored if you tick “Help improve the model”; it helps us "
+                           "retrain the model on people like you.", className="hint")], className="question"),
+    ]), className="section")
+
+
 def result_placeholder():
     return html.Div([
         html.Div("Your result", className="result-kicker"),
@@ -161,7 +179,7 @@ def layout():
                    className="lead-text"),
         ], className="page-header"),
         dbc.Row([
-            dbc.Col([section(title, questions) for title, questions in SECTIONS], lg=7),
+            dbc.Col([section(title, questions) for title, questions in SECTIONS] + [research_question()], lg=7),
             dbc.Col(html.Div([
                 dbc.Card(dbc.CardBody([
                     html.Div(id="result", children=result_placeholder()),
@@ -201,7 +219,15 @@ def marker_position(probability, threshold, high_risk):
     return 200 / 3 + (probability - high_risk) / (1 - high_risk) * 100 / 3
 
 
-def render_result(body, threshold, high_risk):
+KNOWN_DIAGNOSIS_NOTE = {
+    1: "You told us a doctor has found prediabetes. This check is meant for people without a diagnosis; please follow "
+       "your doctor's advice.",
+    2: "You told us a doctor has diagnosed diabetes. This check is meant for people without a diagnosis; please follow "
+       "your doctor's advice.",
+}
+
+
+def render_result(body, threshold, high_risk, diagnosis=None):
     level = body["risk_level"]
     probability = body["probability"]
     very_low = probability < 0.005
@@ -219,6 +245,8 @@ def render_result(body, threshold, high_risk):
         html.Div([html.Span("Low"), html.Span(f"{threshold:.1%}"), html.Span("Elevated"),
                   html.Span(f"{high_risk:.0%}"), html.Span("High")], className="risk-scale"),
         html.P(body["message"], className="result-message"),
+        *([dbc.Alert(KNOWN_DIAGNOSIS_NOTE[diagnosis], color="info", className="known-diagnosis")]
+          if diagnosis in KNOWN_DIAGNOSIS_NOTE else []),
         html.P("Of 100 people with answers like yours, " + ("fewer than 1 has" if very_low else
                f"about {round(probability * 100)} have") + " prediabetes or diabetes.", className="muted"),
         html.P(body["disclaimer"], className="disclaimer"),
@@ -279,15 +307,18 @@ def show_bmi(height_cm, weight_kg):
 
 @app.callback(Output("result", "children"), Input("submit", "n_clicks"),
               [State(field, "value") for field in CHOICE_FIELDS]
-              + [State("height", "value"), State("weight", "value"), State("consent", "value")],
+              + [State("height", "value"), State("weight", "value"), State("consent", "value"),
+                 State("diagnosis", "value")],
               prevent_initial_call=True)
 def check_risk(_, *values):
-    answers = dict(zip(CHOICE_FIELDS, values[:-3]))
-    height_cm, weight_kg, consent = values[-3:]
+    answers = dict(zip(CHOICE_FIELDS, values[:-4]))
+    height_cm, weight_kg, consent, diagnosis = values[-4:]
     payload, missing = build_payload(answers, height_cm, weight_kg)
     if missing:
         return render_problems("Please answer every question:", missing)
     params = {"store": "true", "source": "ui"} if consent else {}   # stored only with consent (D-68)
+    if consent and diagnosis in (0, 1, 2):
+        params["diagnosis"] = str(diagnosis)                         # optional label for retraining (D-79)
     try:
         response = requests.post(f"{API_BASE}/predict", json=payload, params=params, timeout=10)
         if response.status_code == 400:
@@ -295,7 +326,7 @@ def check_risk(_, *values):
                                    [friendly_error(e, payload) for e in response.json()["errors"]])
         response.raise_for_status()
         body = response.json()
-        return render_result(body, *cutoffs(body["model"]))
+        return render_result(body, *cutoffs(body["model"]), diagnosis=diagnosis)
     except requests.RequestException:
         return render_problems("The risk service is not available.",
                                [f"Is the API running? Start it with `python -m api.main` ({API_BASE})."])

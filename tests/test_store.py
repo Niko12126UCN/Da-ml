@@ -32,7 +32,8 @@ def test_predictions_are_stored_without_identifying_columns(store):
     assert list(df["risk_level"]) == ["high", "low"] and list(df["flagged"]) == [1, 0]
     assert list(df["Age"]) == [PERSON["Age"], 2] and (df["model"] == "model_a").all()
     assert set(df.columns) == {"id", "created_at", "model", "probability", "risk_level", "flagged", "source",
-                               *FEATURE_COLUMNS}                     # nothing like name, IP or browser (D-67)
+                               *FEATURE_COLUMNS, "diagnosis"}        # nothing like name, IP or browser (D-67)
+    assert df["diagnosis"].isna().all()                              # optional label, not given here
     assert df["created_at"].str.endswith("+00:00").all()             # UTC
 
 

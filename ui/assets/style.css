@@ -103,6 +103,7 @@ body {
   font-size: 0.85rem; color: var(--muted); border-top: 1px solid var(--line);
   padding-top: 0.75rem; margin-top: 0.75rem;
 }
+.known-diagnosis { font-size: 0.9rem; padding: 0.6rem 0.9rem; }
 .problems ul { margin: 0.5rem 0 0; padding-left: 1.1rem; }
 
 .submit {
@@ -136,6 +137,16 @@ body {
 .tile-label { font-size: 0.78rem; color: var(--muted); font-weight: 500; }
 .tile-value { font-size: 1.6rem; font-weight: 700; letter-spacing: -0.02em; line-height: 1.25; }
 .tile-note { font-size: 0.78rem; color: var(--muted); min-height: 1.1em; }
+.recommendation { border-radius: 14px; padding: 1.1rem 1.4rem; margin-bottom: 1.25rem; border: 1px solid; }
+.rec-retrain { background: #fef3f2; border-color: #d03b3b; }
+.rec-watch { background: #fff8e6; border-color: #fab219; }
+.rec-title { font-weight: 700; font-size: 1.05rem; display: flex; align-items: center; gap: 0.5rem; }
+.rec-retrain .rec-title { color: #b42318; }
+.rec-watch .rec-title { color: #8a5a00; }
+.rec-reasons { margin: 0.5rem 0 0.4rem; padding-left: 1.2rem; }
+.rec-data, .rec-command { margin: 0.25rem 0 0; font-size: 0.92rem; }
+.rec-command code { background: #fff; border: 1px solid var(--line); border-radius: 6px; padding: 0.1rem 0.4rem;
+  color: var(--text); }
 .card-note { margin-top: -0.6rem; margin-bottom: 0.75rem; }
 .empty-chart {
   border: 1px dashed var(--line); border-radius: 10px; padding: 1.5rem; text-align: center;

@@ -8,6 +8,7 @@ API picks it up by itself (D-62); otherwise the live model stays and the reasons
 Usage (from the project root, in the da-ml environment):
     python -m ml.train
     python -m ml.train --data path/to/dataset.csv [--out models] [--force]
+    python -m ml.train --with-user-data      the dataset + every stored user row with a diagnosis (D-80)
 Exit code: 0 = new model is live, 2 = trained but not deployed (quality check failed), 1 = error.
 """
 
@@ -32,12 +33,13 @@ from sklearn.model_selection import StratifiedKFold, train_test_split
 
 from ml.monitoring import build_reference
 from ml.risk import HIGH_RISK
-from ml.store import DEFAULT_STORE, import_training_runs
+from ml.store import DEFAULT_STORE, import_training_runs, labelled_user_rows
 from ml.validation import FEATURE_COLUMNS, FEATURE_RANGES, TARGET_COLUMN, validate_training_data
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DATA = PROJECT_ROOT / "data" / "raw_data" / "diabetes_012_health_indicators_BRFSS2015.csv"
 DEFAULT_OUT = PROJECT_ROOT / "models"
+TRAINING_SETS = PROJECT_ROOT / "data" / "training_sets"   # combined datasets with user rows (not in git, D-80)
 
 SEED = 42                # D-24
 TEST_SIZE = 0.2          # D-24
@@ -202,10 +204,25 @@ def main(argv=None):
     parser.add_argument("--force", action="store_true", help="make the new model live even if the check fails")
     parser.add_argument("--store", default=DEFAULT_STORE, help="data store where the run is recorded "
                                                                "(default: data/store.db)")
+    parser.add_argument("--with-user-data", action="store_true",
+                        help="add the stored user rows that have a diagnosis to --data (D-80)")
     args = parser.parse_args(argv)
 
     print(f"Reading {args.data}")
-    model, info = train(pd.read_csv(args.data))
+    df = pd.read_csv(args.data)
+    data_path, user_rows = args.data, 0
+    if args.with_user_data:
+        users = labelled_user_rows(args.store)
+        user_rows = len(users)
+        df = pd.concat([df, users], ignore_index=True)
+        # keep the exact training data (it contains users' answers, so data/training_sets/ is not in git, D-80)
+        data_path = TRAINING_SETS / datetime.now().strftime("combined_%Y%m%d_%H%M%S.csv")
+        data_path.parent.mkdir(parents=True, exist_ok=True)
+        df.to_csv(data_path, index=False)
+        print(f"Added {user_rows:,} labelled user rows from {args.store} -> {len(df):,} rows, saved as {data_path}"
+              if user_rows else "No stored user rows have a diagnosis yet; training on the original dataset only.")
+    model, info = train(df)
+    info["rows"]["user_rows"] = user_rows
     test = info["metrics"]["test"]
     print(f"\nTest set: ROC-AUC {test['roc_auc']:.4f}, recall {test['recall']:.1%}, "
           f"precision {test['precision']:.1%}, flagged {test['share_flagged']:.1%}")
@@ -215,7 +232,7 @@ def main(argv=None):
     go_live = not failures or args.force
     quality = {"passed": not failures, "failures": failures, "forced": bool(failures and args.force),
                "compared_with": current["run_id"] if current else None, "deployed": go_live}
-    run_dir = save(model, info, args.out, args.data, quality)
+    run_dir = save(model, info, args.out, data_path, quality)
     print(f"Saved to {run_dir}")
 
     if failures:

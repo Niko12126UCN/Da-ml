@@ -143,6 +143,21 @@ def requests_chart(daily):
     return fig
 
 
+def recommendation_card(rec):
+    """'Retraining recommended' (drift) or 'Keep an eye on it' (watch), with reasons and what to run (D-81)."""
+    if not rec or rec["level"] == "none":
+        return None
+    items = [html.Div([html.Span(STATUS_ICON["drift" if rec["level"] == "retrain" else "watch"],
+                                 className="status-icon"), rec["title"]], className="rec-title"),
+             html.Ul([html.Li(reason) for reason in rec["reasons"]], className="rec-reasons"),
+             html.P(rec["data"], className="rec-data")]
+    if rec["command"]:
+        items.append(html.Div(["To retrain on the original dataset plus the labelled user rows, run ",
+                               html.Code(rec["command"]), " (or “Train model (with user data)” in PyCharm). The new "
+                               "model goes live only if it passes the quality check."], className="rec-command"))
+    return html.Div(items, className=f"recommendation rec-{rec['level']}")
+
+
 def status_badge(status, model):
     return [html.Span([html.Span(STATUS_ICON[status], className="status-icon"), STATUS_TEXT[status]],
                       className=f"status-badge status-{status.replace(' ', '-')}"),
@@ -157,7 +172,8 @@ def body(data):
         tile("Requests, total", f"{v['requests']:,}", f"{v['people_predicted']:,} people predicted"),
         tile("Error rate", f"{v['error_rate']:.1%}", "invalid input"),
         tile("Opted in", f"{v['share_stored']:.0%}", "answers stored"),
-        tile("Stored predictions", f"{r['stored_predictions']:,}", f"minimum for drift: {r['min_predictions']}"),
+        tile("Stored predictions", f"{r['stored_predictions']:,}",
+             f"min. {r['min_predictions']} for drift · {data.get('labelled_user_rows', 0):,} with diagnosis"),
         tile("Mean risk", f"{r['prediction']['mean']:.1%}" if r["prediction"] else "–",
              f"reference {r['prediction']['mean_reference']:.1%}" if r["prediction"] else "needs stored predictions"),
     ], className="g-3 tiles")
@@ -197,11 +213,13 @@ def body(data):
 
     history = dash_table.DataTable(
         columns=[{"name": n, "id": i} for n, i in [("Model", "run_id"), ("Trained", "trained"), ("Data", "data_file"),
-                                                   ("Test ROC-AUC", "auc"), ("Recall", "recall"),
-                                                   ("Precision", "precision"), ("Deployed", "deployed")]],
+                                                   ("User rows", "user_rows"), ("Test ROC-AUC", "auc"),
+                                                   ("Recall", "recall"), ("Precision", "precision"),
+                                                   ("Deployed", "deployed")]],
         data=[{"run_id": ("● " if m["live"] else "") + m["run_id"],
                "trained": datetime.fromisoformat(m["created_at"]).strftime("%d %b %Y, %H:%M"),
-               "data_file": m["data_file"], "auc": f"{m['test_roc_auc']:.4f}", "recall": f"{m['test_recall']:.1%}",
+               "data_file": m["data_file"], "user_rows": f"{m.get('user_rows', 0):,}",
+               "auc": f"{m['test_roc_auc']:.4f}", "recall": f"{m['test_recall']:.1%}",
                "precision": f"{m['test_precision']:.1%}",
                "deployed": "live" if m["live"] else ("yes (forced)" if m["forced"] else "yes") if m["deployed"]
                else "no: " + "; ".join(m["failures"])} for m in data["model_history"]],
@@ -213,6 +231,7 @@ def body(data):
 
     return html.Div([
         tiles,
+        recommendation_card(data.get("recommendation")),
         dbc.Row([
             dbc.Col(card("Data drift per question", drift,
                          note="PSI between the stored answers and the training data. Below 0.1 stable, "

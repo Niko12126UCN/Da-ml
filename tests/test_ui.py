@@ -105,7 +105,7 @@ def test_answers_are_only_sent_for_storage_with_consent(monkeypatch, consent, ex
     monkeypatch.setattr(ui.app.requests, "post", fake_post)
     monkeypatch.setattr(ui.app, "cutoffs", lambda model: (0.151, 0.30))
     values = [ANSWERS[f] for f in CHOICE_FIELDS]
-    result = ui.app.check_risk(1, *values, 175, 96, consent)
+    result = ui.app.check_risk(1, *values, 175, 96, consent, None)
     assert sent["params"] == expected_params
     assert ("stored anonymously" in str(result)) == consent
 

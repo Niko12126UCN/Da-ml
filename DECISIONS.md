@@ -86,6 +86,9 @@ Newest decisions are at the bottom. If a decision is changed later, the old entr
 | D-76 | 2026-11-18 | Tests can never write to the real data store (`tests/conftest.py`) | ✅ |
 | D-77 | 2026-11-18 | Dashboard at `/dashboard` in the web UI, fed by the API's `/monitoring`, refreshed every 10 s | ✅ |
 | D-78 | 2026-11-18 | Dashboard charts follow the dataviz method; colours checked with its validator | ✅ |
+| D-79 | 2026-11-18 | Optional question "Has a doctor ever told you …?" gives stored user rows a label | ✅ |
+| D-80 | 2026-11-18 | `ml.train --with-user-data`: original dataset + all labelled user rows | ✅ |
+| D-81 | 2026-11-18 | Drift → "Retraining recommended" on the dashboard and in the report; retraining is started by hand | ✅ |
 
 ---
 
@@ -891,3 +894,46 @@ The colour pairs were checked with the skill's validator against the white card 
 **pass all checks**. A grey reference colour was tried first and **failed** (too little chroma, 2.13:1 contrast).
 **Why:** Charts that can be read correctly by everyone, including colour-blind readers, and that look like one
 system. The app has no dark mode, so the charts are light only.
+
+### D-79 — Optional label question
+**Date:** 2026-11-18
+**Decision:** The UI has an optional card "For research (optional)" with the question **"Has a doctor ever told you
+that you have diabetes or prediabetes?"**: No / Prediabetes / Diabetes / Prefer not to say. The answer is coded like
+`Diabetes_012` (0 / 1 / 2) and stored in a new `diagnosis` column of `predictions`, **only** when the person ticked
+"Help improve the model" (D-68). It is **never used for the prediction**. The API takes it as
+`/predict?store=true&diagnosis=0|1|2`, for one person only; other values, or a diagnosis without `store=true`, get
+HTTP 400. A person who answers "Prediabetes" or "Diabetes" sees a note that the check is meant for people without a
+diagnosis. Existing stores get the column automatically.
+**Why:** The team wants retraining to use the users' data together with the original dataset. Training needs a
+label per person, and users' rows had none; using the model's own predictions as labels was rejected, because the
+model would only learn from itself and reinforce its own mistakes. The label in the original data comes from the same
+self-reported survey question, so user labels are consistent with it (including the same weakness: undiagnosed
+people answer "No"). Optional and consent-bound, because it is health data (D-67 to D-69).
+
+### D-80 — Training with user data
+**Date:** 2026-11-18
+**Decision:** `python -m ml.train --with-user-data` (PyCharm: **"Train model (with user data)"**) trains on the
+`--data` file (default: the Kaggle CSV) **plus every stored user row with a diagnosis**. The combined dataset is saved
+as `data/training_sets/combined_<date>_<time>.csv` (in `.gitignore`, since it contains users' answers), and that file
+is what the model's metadata fingerprints. The number of user rows is stored as `rows.user_rows` in `metadata.json`
+and as `user_rows` in the store's `training_runs` (shown in the dashboard's model history). Everything else is
+unchanged: same validation, split, threshold method and quality check (D-61); `python -m ml.train --data <file>`
+still trains on one specific file, as before.
+**Why:** The team's decision: when retraining is recommended, the users' data and the original dataset are used
+together, and a specific dataset can still be chosen. Saving the combined file keeps every model reproducible.
+**Known effect:** with a few hundred user rows next to 253,680 survey rows, the model and its reference
+(`reference.json`) change only slightly; if users differ strongly from the survey, drift will come back after
+retraining until enough labelled user rows exist. Giving user rows extra weight is a possible next step.
+
+### D-81 — Retraining recommendation
+**Date:** 2026-11-18
+**Decision:** `ml.monitoring.recommendation` turns the monitoring status into advice: **drift → "Retraining
+recommended"**, **watch → "Keep an eye on it"**, otherwise nothing. It lists the reasons (each question at watch or
+drift, and prediction drift), how many labelled user rows would be added, and the command
+(`python -m ml.train --with-user-data`). The dashboard shows it as a red or amber card below the key numbers;
+`python -m ml.monitoring` prints it; `python -m ml.monitoring --check` exits with code **3** when retraining is
+recommended (0 otherwise), so a scheduled task can react. Retraining itself is **started by hand** (command or
+PyCharm).
+**Why:** Closes the loop of the target picture (D-66): monitoring → data store → training → stored models →
+inference. Starting by hand keeps a person in control of when a new model is trained; the quality check (D-61) still
+decides whether it goes live. Checked end to end on temporary copies (`RESULTS.md`, step 12).

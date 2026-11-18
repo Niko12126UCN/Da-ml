@@ -229,3 +229,6 @@ AutogluonModels/
 # Data store: health answers of individuals, never committed (D-70)
 data/store.db
 data/store.db-*
+
+# Combined training sets with users' answers (D-80)
+data/training_sets/

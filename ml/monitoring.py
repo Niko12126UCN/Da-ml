@@ -11,6 +11,7 @@ True outcomes never come back from users (D-66), so live accuracy can't be monit
 
 Usage (from the project root, in the da-ml environment):
     python -m ml.monitoring                                    report for the live model
+    python -m ml.monitoring --check                            same, exit code 3 if retraining is recommended
     python -m ml.monitoring --build-reference <run_id> --data <csv>   create reference.json for an existing model
 """
 
@@ -180,6 +181,29 @@ def report(store_path=DEFAULT_STORE, models_dir=MODELS_DIR):
     return result
 
 
+RETRAIN_COMMAND = "python -m ml.train --with-user-data"
+
+
+def recommendation(r, labelled_rows):
+    """What to do about the monitoring result (D-81): 'retrain' at drift, 'watch' at watch, otherwise 'none'."""
+    shifted = [f for f in r["features"] if f["status"] != "stable"]
+    reasons = [f"{f['feature']} differs from the training data (PSI {f['psi']:.3f}, {f['status']})" for f in shifted]
+    if r["prediction"] and r["prediction"]["status"] != "stable":
+        p = r["prediction"]
+        reasons.append(f"the predictions differ from the reference (PSI {p['psi']:.3f}; flagged "
+                       f"{p['share_flagged']:.1%} vs. {p['share_flagged_reference']:.1%})")
+    data_note = (f"{labelled_rows:,} stored user rows have a diagnosis and will be added to the original dataset."
+                 if labelled_rows else "No stored user rows have a diagnosis yet, so retraining would use the "
+                 "original dataset only; a labelled dataset that covers the shifted groups is needed.")
+    if r["status"] == "drift":
+        return {"level": "retrain", "title": "Retraining recommended", "reasons": reasons, "data": data_note,
+                "command": RETRAIN_COMMAND}
+    if r["status"] == "watch":
+        return {"level": "watch", "title": "Keep an eye on it", "reasons": reasons, "data": data_note,
+                "command": None}
+    return {"level": "none", "title": "No action needed", "reasons": [], "data": data_note, "command": None}
+
+
 def daily_requests(store_path=DEFAULT_STORE, days=30, now=None):
     """Requests per day (UTC) for the last `days` days, split into OK and invalid. Days without requests count 0."""
     requests = read_table("requests", store_path)
@@ -205,12 +229,21 @@ def model_history(store_path=DEFAULT_STORE, models_dir=MODELS_DIR):
     return [{"run_id": r.run_id, "created_at": r.created_at, "data_file": r.data_file,
              "test_roc_auc": r.test_roc_auc, "test_recall": r.test_recall, "test_precision": r.test_precision,
              "deployed": bool(r.deployed), "forced": bool(r.forced), "failures": json.loads(r.failures or "[]"),
+             "user_rows": int(r.user_rows or 0),
              "live": r.run_id == live} for r in runs.itertuples()]
+
+
+def labelled_count(store_path=DEFAULT_STORE):
+    predictions = read_table("predictions", store_path)
+    return int(predictions["diagnosis"].notna().sum()) if "diagnosis" in predictions else 0
 
 
 def dashboard_data(store_path=DEFAULT_STORE, models_dir=MODELS_DIR):
     """Everything the dashboard shows, in one call (aggregates only, never individual answers)."""
-    return {"report": report(store_path, models_dir), "daily_requests": daily_requests(store_path),
+    r = report(store_path, models_dir)
+    labelled = labelled_count(store_path)
+    return {"report": r, "recommendation": recommendation(r, labelled), "labelled_user_rows": labelled,
+            "daily_requests": daily_requests(store_path),
             "model_history": model_history(store_path, models_dir),
             "thresholds": {"watch": PSI_WATCH, "drift": PSI_DRIFT, "min_predictions": MIN_PREDICTIONS},
             "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds")}
@@ -256,18 +289,32 @@ def print_report(r):
             print(f"  {f['feature']:22s} {f['psi']:.3f}  {f['status']}")
 
 
+def print_recommendation(rec):
+    print(f"\n{rec['title'].upper()}")
+    for reason in rec["reasons"]:
+        print(f"  - {reason}")
+    print(f"  {rec['data']}")
+    if rec["command"]:
+        print(f"  Run: {rec['command']}")
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Monitoring report for the live model.")
     parser.add_argument("--store", default=DEFAULT_STORE, help="data store (default: data/store.db)")
     parser.add_argument("--models", default=MODELS_DIR, help="models folder (default: models/)")
     parser.add_argument("--build-reference", metavar="RUN_ID", help="create reference.json for an existing model")
     parser.add_argument("--data", help="the CSV the model was trained on (with --build-reference)")
+    parser.add_argument("--check", action="store_true",
+                        help="exit code 3 if retraining is recommended (for a scheduled task), else 0")
     args = parser.parse_args(argv)
     if args.build_reference:
         print(f"Saved {build_reference_for_existing(args.build_reference, args.data, args.models)}")
         return 0
-    print_report(report(args.store, args.models))
-    return 0
+    r = report(args.store, args.models)
+    rec = recommendation(r, labelled_count(args.store))
+    print_report(r)
+    print_recommendation(rec)
+    return 3 if args.check and rec["level"] == "retrain" else 0
 
 
 if __name__ == "__main__":

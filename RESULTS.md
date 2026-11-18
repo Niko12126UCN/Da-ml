@@ -342,6 +342,28 @@ Visual check on a **temporary demo store** (743 requests over 14 days, 5% invali
   legend order, gaps between stacked segments, white dashes on empty days, overlapping threshold labels, tile
   spacing.
 
+## Step 12 — Closing the loop (2026-11-18)
+
+`python -m pytest tests`: **116 tests passed** (16 new: labelled rows in training format; old stores get the new
+columns; the API stores the diagnosis only with `store=true` for one person and rejects invalid values; the UI sends
+the diagnosis only with consent and notes a known diagnosis; recommendation levels; `--check` exit code 3; the
+dashboard shows the recommendation; training with user data combines and records the rows); flake8 clean. The real
+store and `data/training_sets/` were untouched by the tests.
+
+End-to-end run in **temporary folders** (copy of the live model, demo store): 400 unseen survey people aged 70+,
+each with their true survey answer as diagnosis, used the app.
+
+| Stage | Result |
+|---|---|
+| 1. Monitoring | **Drift**: Age PSI 6.404 (drift); Income 0.209, HighBP 0.160, MentHlth 0.129, AnyHealthcare 0.103 (watch); predictions PSI 1.050, mean risk 23.1% vs. 15.7%, flagged 61.5% vs. 38.0% → **Retraining recommended**, "400 stored user rows have a diagnosis …", `python -m ml.train --with-user-data` |
+| 2. Retraining | 253,680 Kaggle rows + 400 user rows = 254,080 (combined CSV saved); threshold 0.1505; test ROC-AUC 0.8257, recall 80.0%, precision 33.1% → quality check passed → **live** (`catboost_20261118_110828`), exit code 0 |
+| 3. Afterwards | Monitoring for the new model: 0 stored predictions → "not enough data"; model history: `catboost_20261118_100430` 0 user rows, `catboost_20261118_110828` 400 user rows |
+
+**Findings:** the loop works end to end. With 400 user rows the new model is practically the old one (the reference is
+still 99.8% survey data), so if users really are much older, drift returns once the new model has 100+ stored
+predictions (D-80). Demo caveat: the 400 "users" were Kaggle test rows, so they were also in the Kaggle part of the
+combined data; real users would be new people.
+
 ## Expected vs. actual
 
 Predictions from `Diabetes_Prediction_Feasibility.md` (written before any model was trained) compared with the

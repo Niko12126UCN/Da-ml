@@ -40,7 +40,7 @@ Build a complete pipeline that can:
 | 9. Data store + logging (`ml/store.py`, `data/store.db`; opt-in in the UI) | ✅ Done (2026-11-18) |
 | 10. Monitoring: data drift, prediction drift, volume, errors per model (`ml/monitoring.py`) | ✅ Done (2026-11-18) |
 | 11. Real-time dashboard (`/dashboard`, API `/monitoring`) | ✅ Done (2026-11-18) |
-| 12. Closing the loop: drift alert → "retraining recommended" | ⬜ Next |
+| 12. Closing the loop: label question, "retraining recommended", `--with-user-data` | ✅ Done (2026-11-18) |
 
 ## 3. Model selection approach
 
@@ -187,10 +187,11 @@ watch data and model and feed back into retraining.
 | Predictions → data store | `/predict?store=true` (UI: opt-in checkbox) | ✅ step 9 |
 | Data & model monitoring | PSI drift of answers vs. training data, prediction drift, share flagged, volume, errors (`python -m ml.monitoring`) | ✅ step 10 |
 | Real-time dashboard | http://127.0.0.1:8050/dashboard, refreshes every 10 s | ✅ step 11 |
-| Feedback into training | drift alert → "retraining recommended"; training runs in the store | ⬜ step 12 |
+| Feedback into training | drift → "retraining recommended"; optional label question; `ml.train --with-user-data` (original data + labelled user rows) | ✅ step 12 |
 
-**Limitation:** the store gets **no true labels** (users don't report a diagnosis), so live accuracy/recall can't be
-measured and stored predictions can't be used for retraining. Retraining needs labelled datasets.
+**Labels:** users can optionally answer "Has a doctor ever told you …?" (D-79); only those rows are used for
+retraining, together with the original dataset (D-80). Live accuracy is still not measured: the label describes a
+past diagnosis, and only some users give it.
 
 **Privacy (D-67 to D-70):** only with opt-in consent; no identifying fields; kept indefinitely for research;
 `data/store.db` never in git.

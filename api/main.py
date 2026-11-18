@@ -6,7 +6,8 @@ Serves the model named in models/latest.txt:
     GET  /monitoring -> drift report, requests per day and model history for the dashboard (aggregates only)
     POST /predict  -> risk for one person (JSON object) or several people (JSON list of objects)
                       add ?store=true to store the answers and results anonymously in the data store (opt-in, D-68),
-                      and ?source=ui when the request comes from the web UI
+                      ?source=ui when the request comes from the web UI, and ?diagnosis=0|1|2 (one person, with
+                      store=true) for the optional "has a doctor told you ..." answer, the label for retraining (D-79)
 
 When training switches models/latest.txt to a new model, the API loads it and switches over by itself, without a
 restart (D-62). If the new model can't be loaded, the current one keeps serving and the error is logged.
@@ -133,6 +134,14 @@ def create_app(models_dir=MODELS_DIR, store_path=DEFAULT_STORE):
             X = validate_features(data)
         except ValidationError as e:
             return {"errors": e.errors}, 400
+        diagnosis = request.args.get("diagnosis")   # optional label for retraining, only with storage (D-79)
+        if diagnosis is not None:
+            if diagnosis not in ("0", "1", "2"):
+                message = f"diagnosis must be 0 (no), 1 (prediabetes) or 2 (diabetes), got {diagnosis!r}"
+                return {"errors": [message]}, 400
+            if request.args.get("store") != "true" or isinstance(data, list):
+                return {"errors": ["diagnosis is only accepted for one person, together with store=true"]}, 400
+            diagnosis = int(diagnosis)
 
         model, metadata = store.get()
         results = [assess(p, metadata["threshold"]) for p in model.predict_proba(X)[:, 1]]
@@ -140,7 +149,7 @@ def create_app(models_dir=MODELS_DIR, store_path=DEFAULT_STORE):
         if request.args.get("store") == "true":
             source = "ui" if request.args.get("source") == "ui" else "api"
             try:
-                log_predictions(X, results, metadata["run_id"], source, store_path)
+                log_predictions(X, results, metadata["run_id"], source, store_path, diagnosis)
                 body["stored"] = True
             except Exception:   # the data store must never stop a prediction (D-71)
                 log.exception("Could not store the prediction in %s", store_path)
