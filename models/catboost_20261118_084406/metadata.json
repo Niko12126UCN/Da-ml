@@ -1,0 +1,170 @@
+{
+  "run_id": "catboost_20261118_084406",
+  "created": "2026-11-18T08:44:06",
+  "purpose": "Screening for prediabetes/diabetes risk - not a diagnosis (D-07)",
+  "model_file": "model.cbm",
+  "features": [
+    "HighBP",
+    "HighChol",
+    "CholCheck",
+    "BMI",
+    "Smoker",
+    "Stroke",
+    "HeartDiseaseorAttack",
+    "PhysActivity",
+    "Fruits",
+    "Veggies",
+    "HvyAlcoholConsump",
+    "AnyHealthcare",
+    "NoDocbcCost",
+    "GenHlth",
+    "MentHlth",
+    "PhysHlth",
+    "DiffWalk",
+    "Sex",
+    "Age",
+    "Education",
+    "Income"
+  ],
+  "feature_ranges": {
+    "HighBP": [
+      0,
+      1
+    ],
+    "HighChol": [
+      0,
+      1
+    ],
+    "CholCheck": [
+      0,
+      1
+    ],
+    "BMI": [
+      12,
+      98
+    ],
+    "Smoker": [
+      0,
+      1
+    ],
+    "Stroke": [
+      0,
+      1
+    ],
+    "HeartDiseaseorAttack": [
+      0,
+      1
+    ],
+    "PhysActivity": [
+      0,
+      1
+    ],
+    "Fruits": [
+      0,
+      1
+    ],
+    "Veggies": [
+      0,
+      1
+    ],
+    "HvyAlcoholConsump": [
+      0,
+      1
+    ],
+    "AnyHealthcare": [
+      0,
+      1
+    ],
+    "NoDocbcCost": [
+      0,
+      1
+    ],
+    "GenHlth": [
+      1,
+      5
+    ],
+    "MentHlth": [
+      0,
+      30
+    ],
+    "PhysHlth": [
+      0,
+      30
+    ],
+    "DiffWalk": [
+      0,
+      1
+    ],
+    "Sex": [
+      0,
+      1
+    ],
+    "Age": [
+      1,
+      13
+    ],
+    "Education": [
+      1,
+      6
+    ],
+    "Income": [
+      1,
+      8
+    ]
+  },
+  "threshold": 0.15083006319759498,
+  "target_recall": 0.8,
+  "metrics": {
+    "cross_validation": {
+      "roc_auc": 0.8244480766847222,
+      "pr_auc": 0.4545756205067133,
+      "precision_at_target_recall": 0.3300185729763195,
+      "brier": 0.10621167904841905,
+      "recall": 0.8000125070352073,
+      "precision": 0.3300141880562363,
+      "f1": 0.4672729929140186,
+      "accuracy": 0.7125315357931252,
+      "share_flagged": 0.38202656890570796
+    },
+    "test": {
+      "roc_auc": 0.824734554929872,
+      "pr_auc": 0.46332650769192424,
+      "precision_at_target_recall": 0.32909829741268454,
+      "brier": 0.10573522501093095,
+      "recall": 0.7961225766103814,
+      "precision": 0.33004926108374383,
+      "f1": 0.4666422287390029,
+      "accuracy": 0.7132213812677389,
+      "share_flagged": 0.38010485651214126
+    }
+  },
+  "rows": {
+    "total": 253680,
+    "train": 202944,
+    "test": 50736,
+    "positive_share": 0.15758830022075054
+  },
+  "settings": {
+    "model": "CatBoostClassifier",
+    "params": {
+      "iterations": 500,
+      "learning_rate": 0.1,
+      "depth": 6
+    },
+    "seed": 42,
+    "test_size": 0.2,
+    "n_folds": 5,
+    "balancing": "none"
+  },
+  "data": {
+    "file": "diabetes_012_health_indicators_BRFSS2015.csv",
+    "sha256": "a971809d0786d2d7d7f6070f83dfe8af9d860ea33a79e0e2701c8a49f78f9861"
+  },
+  "versions": {
+    "python": "3.11.18",
+    "catboost": "1.2.8",
+    "scikit-learn": "1.4.0",
+    "pandas": "2.2.2",
+    "numpy": "1.26.4"
+  }
+}

@@ -128,6 +128,22 @@ for lack of time. No second stacking layer was trained; the best model is a weig
 | AutoGluon best single (CatBoost_BAG_L1) | 0.8260 | 0.4669 | 0.3298 | 0.1054 | 0.154 | 79.5% | 33.2% | 0.469 | 71.6% | 37.7% | 0.12 s |
 | **Our CatBoost** (step 1 settings) | 0.8248 | 0.4636 | 0.3283 | 0.1057 | 0.151 | 79.5% | 33.1% | 0.467 | 71.4% | 37.9% | 0.01 s |
 
+**The same results in people** (test set: 50,736 people, 7,995 with prediabetes/diabetes). Recall is ~79.5% for all
+three **by design**, because each threshold was set for 80% recall (D-23); the difference is how many false alarms
+each model needs to get there. Counts are derived from the rounded recall / share-flagged values, so they can be off
+by a few people.
+
+| Model | Caught | Missed | Flagged in total | False alarms | Precision |
+|---|---|---|---|---|---|
+| AutoGluon best (ensemble) | 6,358 | 1,637 | 19,097 | 12,739 | 33.3% |
+| AutoGluon best single | 6,354 | 1,641 | 19,127 | 12,774 | 33.2% |
+| Our CatBoost | 6,358 | 1,637 | 19,234 | 12,876 | 33.1% |
+
+The ensemble needs ~140 fewer false alarms out of 50,736 people (0.3%), about 1 fewer unnecessary test per 360 people
+screened. Accuracy is ~71.5% for all three, lower than the dummy's 84.2% because many false alarms are accepted
+in order to catch 80% of diabetics. For every flagged person, the chance of actually having prediabetes or diabetes
+is about 1 in 3, whichever model is used.
+
 AutoGluon model folder: ~2,975 MB (all models). Our CatBoost retrained here scored 0.8248 vs. 0.8247 in
 `Modeling.ipynb` (different scikit-learn version / thread scheduling, D-36).
 
@@ -141,6 +157,33 @@ AutoGluon model folder: ~2,975 MB (all models). Our CatBoost retrained here scor
 5. The ensemble costs ~700× slower predictions and ~3 GB of files for its +0.001.
 6. AutoGluon's best single model is a **bagged CatBoost** (8 CatBoost models averaged); that is where most of its
    small gain comes from.
+
+## Step 3 — Input validation (`ml/validation.py`, 2026-11-18)
+
+`python -m pytest tests` in the `da-ml` environment: **30 tests passed** (`tests/test_validation.py`); flake8 clean.
+
+- The real Kaggle file (253,680 rows) passes, and the output has exactly the same values as the raw CSV, converted
+  to integers.
+- The binary Kaggle file format is rejected (D-39).
+- Rejected with a clear message: missing / unexpected columns, missing values, non-numeric values, decimals in coded
+  columns, out-of-range values (e.g. Age 14, BMI 5 or 120, MentHlth 31, HighBP 2, Income 9), a target of 3, a target
+  with only one class, empty input, wrong input shapes, and text / true / null in prediction input.
+- Several problems in one input are all reported together, also when one value has the wrong type.
+
+## Step 4 — Training script (`ml/train.py`, 2026-11-18)
+
+`python -m pytest tests`: **33 tests passed** (30 validation + 3 training); flake8 clean.
+
+`python -m ml.train` on the Kaggle CSV (1 min 21 s in total; ~12 s per CV fold, 14 s for the final model) →
+`models/catboost_20261118_084406/` (`model.cbm` 563 KB + `metadata.json`):
+
+| | ROC-AUC | PR-AUC | Precision @ 80% recall | Brier | Threshold | Recall | Precision | F1 | Accuracy | Flagged |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Cross-validation (out-of-fold) | 0.8244 | 0.4546 | 0.3300 | 0.1062 | 0.1508 | 80.0% | 33.0% | 0.467 | 71.3% | 38.2% |
+| **Test set** | **0.8247** | 0.4633 | 0.3291 | 0.1057 | 0.1508 | **79.6%** | **33.0%** | 0.467 | 71.3% | 38.0% |
+
+**Finding:** identical to CatBoost in `Modeling.ipynb` (step 1) to 4 decimals, including the threshold, and the
+split matches `data/splits/train_test_split.csv` row for row. The script reproduces the notebook result.
 
 ## Expected vs. actual
 

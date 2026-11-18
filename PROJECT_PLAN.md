@@ -28,9 +28,9 @@ Build a complete pipeline that can:
 | Feasibility assessment (`Diabetes_Prediction_Feasibility.md`) | ✅ Done |
 | Model comparison (`ml/notebooks/Modeling.ipynb`): CatBoost chosen, 80% recall | ✅ Done (2026-11-17) |
 | AutoML benchmark (`ml/notebooks/AutoML.ipynb`): AutoGluon +0.001 ROC-AUC, CatBoost kept | ✅ Done (2026-11-17) |
-| Shared input validation (`ml/validation.py`) | ⬜ Next |
-| Training script (`ml/train.py`) | ⬜ |
-| API (`api/main.py`) | ⬜ |
+| Shared input validation (`ml/validation.py`, `tests/test_validation.py`) | ✅ Done (2026-11-18) |
+| Training script (`ml/train.py`, `tests/test_train.py`) → `models/catboost_20261118_084406/` | ✅ Done (2026-11-18) |
+| API (`api/main.py`) | ⬜ Next |
 | Web UI (`ui/app.py`) | ⬜ |
 | Deployment | ⬜ (target not decided, see section 9) |
 
@@ -137,9 +137,10 @@ Da-ml/
 ├── ml/
 │   ├── notebooks/EDA.ipynb        # EDA + profiling report                           ✅
 │   ├── notebooks/Modeling.ipynb   # LR vs CatBoost vs AutoML comparison + reasoning
-│   ├── train.py                   # validate → train chosen model → save model + metrics + threshold
-│   └── validation.py              # shared schema checks (train.py AND the API)
-├── models/                        # saved model, metrics and threshold (versioned)
+│   ├── train.py                   # validate → train → save model + metrics + threshold    ✅
+│   └── validation.py              # shared schema checks (train.py AND the API)          ✅
+├── tests/                         # pytest: test_validation.py, test_train.py            ✅
+├── models/<run_id>/               # model.cbm + metadata.json per run; latest.txt = current ✅
 ├── api/main.py                    # Flask: /health, /predict (loads model, validates input)
 ├── ui/app.py                      # Dash form → calls /predict → shows risk level + disclaimer
 ├── environment.yml                # da-ml environment                                ✅

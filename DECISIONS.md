@@ -44,6 +44,17 @@ Newest decisions are at the bottom. If a decision is changed later, the old entr
 | D-34 | 2026-11-17 | Where model files are stored (not committed) | ✅ |
 | D-35 | 2026-11-17 | Accept AutoGluon's sequential fold training (`ray` not installed) | ✅ |
 | D-36 | 2026-11-17 | AutoML result: keep CatBoost as the model to deploy | ✅ |
+| D-37 | 2026-11-18 | Design of the shared validation module `ml/validation.py` | ✅ |
+| D-38 | 2026-11-18 | BMI: allowed range 12–98, decimals rounded; all other values must be whole numbers | ✅ |
+| D-39 | 2026-11-18 | Only the three-class `Diabetes_012` file format is accepted for training | ✅ |
+| D-40 | 2026-11-18 | Prediction input: values must be real numbers (no text, true/false or null) | ✅ |
+| D-41 | 2026-11-18 | Training data must contain both people with and without diabetes | ✅ |
+| D-42 | 2026-11-18 | Automated tests with pytest in `tests/`; flake8 with 120-character lines | ✅ |
+| D-43 | 2026-11-18 | Training script `ml/train.py`: command line, own 80/20 split, same settings as step 1 | ✅ |
+| D-44 | 2026-11-18 | Deployed model trained on the 80% training split; test metrics saved with it | ✅ |
+| D-45 | 2026-11-18 | Model saved in CatBoost's own format (`model.cbm`) + `metadata.json` | ✅ |
+| D-46 | 2026-11-18 | Each training run gets its own folder `models/<run_id>/`; `models/latest.txt` names the current one | ✅ |
+| D-47 | 2026-11-18 | Small trained models are committed to git; the user does all commits | ✅ |
 
 ---
 
@@ -361,3 +372,111 @@ ensemble's tiny gain doesn't justify ~700× slower predictions, ~3 GB of files a
 dependencies. Our CatBoost retrained in `AutoML.ipynb` scored 0.8248 vs. 0.8247 in `Modeling.ipynb`; the 0.0001
 difference comes from the different scikit-learn version and thread scheduling and doesn't affect the conclusion.
 Possible later improvement: bag our CatBoost over folds like AutoGluon did (~+0.001), only if it is ever needed.
+
+### D-37 — Design of `ml/validation.py`
+**Date:** 2026-11-18
+**Decision:** One module defines the "exact format" and is used by both the training script and the API (D-14):
+- `FEATURE_RANGES` is the single definition of the 21 features and their allowed (min, max) values, in the order
+  of the raw CSV; `Diabetes_012` must be 0–2.
+- `validate_training_data(df)` checks a whole dataset; `validate_features(data)` checks prediction input: one
+  person (dict), several people (list of dicts) or a DataFrame.
+- Checked: missing / unexpected / duplicate columns, empty input, missing values, non-numeric values, non-whole
+  numbers, values out of range.
+- Column **order** doesn't matter; **extra** columns are rejected (not silently dropped).
+- **All** problems are reported at once in a `ValidationError` (`.errors` is a list of readable messages). Only
+  exception: if columns are missing or unexpected, the values aren't checked until the structure is fixed.
+- Output: a clean integer DataFrame in the canonical column order, so the model always gets the same layout.
+- Duplicate **rows** are not checked, since they are kept on purpose (D-17).
+**Why:** A single definition can't drift apart between training and API. Reporting all problems at once makes a bad
+file or request quick to fix. Rejecting extra columns catches wrong files (e.g. a different dataset) instead of
+training on the wrong data.
+
+### D-38 — BMI range and rounding; whole numbers elsewhere
+**Date:** 2026-11-18
+**Decision:** BMI must be between **12 and 98**, the range seen in the dataset. BMI may be sent with decimals and is
+**rounded** to a whole number, like in the dataset. All other features must be whole numbers; `9.0` is accepted as
+9, but `9.5` is rejected.
+**Why:** The model has only seen BMI values 12–98; predictions outside that range would be guesses. Users (or the UI)
+may calculate BMI from height and weight, which gives decimals; rounding matches how the training data stores BMI.
+For coded answers (age group, yes/no…), a decimal means the input is wrong, so it is rejected rather than guessed.
+
+### D-39 — Only the three-class file format
+**Date:** 2026-11-18
+**Decision:** Training data must have the `Diabetes_012` column (format of
+`diabetes_012_health_indicators_BRFSS2015.csv`). The two Kaggle files with `Diabetes_binary` are rejected with
+"missing columns: Diabetes_012 / unexpected columns: Diabetes_binary".
+**Why:** That is the "exact format" the pipeline is built for (D-02), and the yes/no target is derived from it by the
+pipeline itself (D-08). The binary files lose the prediabetes/diabetes distinction, and the 50/50 file has a
+different class ratio, which would distort the threshold and probabilities (D-19). Can be extended later if needed.
+
+### D-40 — Strict types in prediction input
+**Date:** 2026-11-18
+**Decision:** In `validate_features` with dicts (the JSON the API will receive), every feature value must be a real
+number. Text (`"31"`), `true`/`false` and `null` are rejected, even if they could be converted.
+**Why:** The API should get exactly what the UI sends; a string or boolean means a bug in the caller, and silently
+converting it would hide that bug. CSV files (training) are read by pandas, so there numbers stored as text are fine.
+
+### D-41 — Both classes in the training data
+**Date:** 2026-11-18
+**Decision:** `validate_training_data` rejects a dataset where `Diabetes_012` is only 0 or only 1/2.
+**Why:** A model can't be trained, and no recall threshold can be chosen, without both groups.
+
+### D-42 — Tests and style checks
+**Date:** 2026-11-18
+**Decision:** Automated tests with **pytest** in `tests/` (`tests/test_validation.py`, run from the project root with
+`python -m pytest tests`). Code is checked with **flake8** using `--max-line-length 120`. `ml/` is a Python package
+(`ml/__init__.py`), so the API can `from ml.validation import ...`.
+**Why:** pytest and flake8 are already in `environment.yml` (as in the taxi project). The tests prove that the real
+Kaggle file passes unchanged and that each kind of bad input is rejected with a clear message, and they guard the
+validation when it is changed later. 120 characters matches the line length already used in the notebooks.
+
+### D-43 — Training script `ml/train.py`
+**Date:** 2026-11-18
+**Decision:** A command-line script, run from the project root in `da-ml`:
+`python -m ml.train [--data <csv>] [--out <folder>]` (defaults: the Kaggle CSV and `models/`). It:
+1. reads and validates the CSV (`validate_training_data`, D-37),
+2. builds the yes/no target (D-08) and makes its **own** 80/20 stratified split with seed 42 (D-24),
+3. runs 5-fold stratified CV (seed 42) on the training rows and picks the threshold for **80% recall** from the
+   out-of-fold predictions (D-23),
+4. trains CatBoost with the step 1 settings (500 trees, learning rate 0.1, depth 6, ordinal codes as numbers, no
+   balancing; D-19 to D-21) on all training rows,
+5. evaluates once on the test rows with the same metrics as the notebooks (D-26), and saves the result (D-45, D-46).
+All settings are constants at the top of the file, each with its decision ID.
+**Why:** The pipeline must be able to "take a dataset in this exact format and train a model" without a notebook.
+The script makes its own split instead of reading `data/splits/train_test_split.csv`, because that file only fits
+the Kaggle CSV and the pipeline should work for any CSV in the format. For the Kaggle CSV the split is identical
+(checked by `tests/test_train.py`), and the script reproduces `Modeling.ipynb` exactly (see `RESULTS.md`, step 4).
+
+### D-44 — Deployed model trained on the training split
+**Date:** 2026-11-18
+**Decision:** The model that gets deployed is the one trained on the **80% training rows**. It is not retrained on
+all data. Its test-set metrics are saved in `metadata.json`.
+**Why:** Chosen by the team: every deployed model comes with an honest score measured on data it has never seen.
+Retraining on 100% would add 20% more data for a likely gain of ~0.001 ROC-AUC, but the deployed model itself would
+have no untouched test score.
+
+### D-45 — Model format
+**Date:** 2026-11-18
+**Decision:** The model is saved with CatBoost's own `save_model` as `model.cbm` (~0.6 MB), next to a
+`metadata.json` with: run ID and time, purpose ("not a diagnosis"), the feature list and allowed ranges, the
+threshold and recall target, CV and test metrics, row counts, settings, the data file's name and SHA-256
+fingerprint, and the Python / CatBoost / scikit-learn / pandas / numpy versions.
+**Why:** CatBoost's own format loads with just `catboost` (no pickle, so no risk of running arbitrary code when
+loading, and no dependency on the exact Python objects). The metadata gives the API everything it needs (threshold,
+features) and makes each model traceable: which data, which settings, which versions, how good.
+
+### D-46 — One folder per training run
+**Date:** 2026-11-18
+**Decision:** Each run creates `models/catboost_<YYYYMMDD>_<HHMMSS>/` and then writes that folder's name to
+`models/latest.txt`. The API will load the model named in `latest.txt`. Existing runs are never overwritten.
+**Why:** Old models stay available, so a bad new model can be rolled back by editing one line. The version history
+matches the plan's "saved model, metrics and threshold (versioned)" (D-15).
+
+### D-47 — Trained models in git; user commits
+**Date:** 2026-11-18
+**Decision:** Trained model folders (`model.cbm` + `metadata.json`) and `models/latest.txt` are committed to git as
+long as they are small (~0.6 MB per run). Large artifacts stay git-ignored (AutoGluon, D-34). **Claude never runs
+`git commit`;** the user commits after each step, using the suggested commit message.
+**Why:** The user's decision: with a model in the repo, the API and UI work straight after cloning, without
+training first. The user commits themselves to stay in control of what ends up in the repo. Old runs that are no
+longer needed can be deleted.
