@@ -34,6 +34,7 @@ Build a complete pipeline that can:
 | Risk levels + API (`ml/risk.py`, `api/main.py`, `tests/test_api.py`) | ✅ Done (2026-11-18) |
 | Web UI (`ui/app.py`, `ui/assets/style.css`, `tests/test_ui.py`) + README | ✅ Done (2026-11-18) |
 | Local deployment (`run.py`, `start.bat`): runs on this PC | ✅ Done (2026-11-18) |
+| Automatic deployment: quality check + live switch without restart (`ml/train.py`, `api/main.py`) | ✅ Done (2026-11-18) |
 | Hosting for others (Docker / cloud) | ⬜ Later (D-60) |
 
 ## 3. Model selection approach

@@ -1,15 +1,20 @@
 """Prediction API for the diabetes screening model (step 5 of PROJECT_PLAN.md).
 
-Loads the model named in models/latest.txt and serves:
+Serves the model named in models/latest.txt:
     GET  /health   -> status and which model is loaded
     GET  /model    -> features, allowed ranges, threshold, risk levels and the model's test metrics
     POST /predict  -> risk for one person (JSON object) or several people (JSON list of objects)
+
+When training switches models/latest.txt to a new model, the API loads it and switches over by itself, without a
+restart (D-62). If the new model can't be loaded, the current one keeps serving and the error is logged.
 
 Run from the project root, in the da-ml environment:
     python -m api.main
 """
 
 import json
+import logging
+import threading
 from pathlib import Path
 
 from catboost import CatBoostClassifier
@@ -23,9 +28,16 @@ HOST, PORT = "127.0.0.1", 5001   # same as the taxi project (D-51)
 MAX_PEOPLE = 1000                # per request (D-50)
 
 
-def load_model(models_dir=MODELS_DIR):
-    """Load the model named in models_dir/latest.txt. Returns (model, metadata)."""
-    run_id = (Path(models_dir) / "latest.txt").read_text(encoding="utf-8").strip()
+log = logging.getLogger("api")
+
+
+def live_run_id(models_dir=MODELS_DIR):
+    return (Path(models_dir) / "latest.txt").read_text(encoding="utf-8").strip()
+
+
+def load_model(models_dir=MODELS_DIR, run_id=None):
+    """Load a model (default: the one named in models_dir/latest.txt). Returns (model, metadata)."""
+    run_id = run_id or live_run_id(models_dir)
     run_dir = Path(models_dir) / run_id
     metadata = json.loads((run_dir / "metadata.json").read_text(encoding="utf-8"))
     if metadata["features"] != FEATURE_COLUMNS:
@@ -34,17 +46,46 @@ def load_model(models_dir=MODELS_DIR):
     return model, metadata
 
 
+class ModelStore:
+    """Holds the live model and switches to a new one when models/latest.txt changes (D-62)."""
+
+    def __init__(self, models_dir=MODELS_DIR):
+        self.models_dir = Path(models_dir)
+        self._lock = threading.Lock()
+        self._current = load_model(self.models_dir)   # fails loudly at start-up if there is no usable model
+        self._failed = None                            # run ID that failed to load (not retried every request)
+
+    def get(self):
+        """(model, metadata) of the live model, switching first if latest.txt names a different one."""
+        try:
+            wanted = live_run_id(self.models_dir)
+        except OSError:
+            return self._current
+        if wanted in (self._current[1]["run_id"], self._failed):
+            return self._current
+        with self._lock:
+            if wanted != self._current[1]["run_id"]:
+                try:
+                    self._current = load_model(self.models_dir, wanted)
+                    log.warning("Switched to model %s", wanted)
+                except Exception as e:   # keep serving the current model; a broken new model must not stop the API
+                    self._failed = wanted
+                    log.error("Could not load model %s, keeping %s: %s", wanted, self._current[1]["run_id"], e)
+        return self._current
+
+
 def create_app(models_dir=MODELS_DIR):
-    model, metadata = load_model(models_dir)
-    threshold = metadata["threshold"]
+    store = ModelStore(models_dir)
     app = Flask(__name__)
 
     @app.get("/health")
     def health():
-        return jsonify(status="ok", model=metadata["run_id"])
+        return jsonify(status="ok", model=store.get()[1]["run_id"])
 
     @app.get("/model")
     def model_info():
+        metadata = store.get()[1]
+        threshold = metadata["threshold"]
         return jsonify(
             model=metadata["run_id"],
             purpose=metadata["purpose"],
@@ -70,7 +111,8 @@ def create_app(models_dir=MODELS_DIR):
         except ValidationError as e:
             return jsonify(errors=e.errors), 400
 
-        results = [assess(p, threshold) for p in model.predict_proba(X)[:, 1]]
+        model, metadata = store.get()
+        results = [assess(p, metadata["threshold"]) for p in model.predict_proba(X)[:, 1]]
         body = {"model": metadata["run_id"]}
         if isinstance(data, list):
             body["results"] = results
@@ -82,4 +124,5 @@ def create_app(models_dir=MODELS_DIR):
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s: %(message)s")
     create_app().run(host=HOST, port=PORT, debug=False)

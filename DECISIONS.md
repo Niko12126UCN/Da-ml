@@ -68,6 +68,9 @@ Newest decisions are at the bottom. If a decision is changed later, the old entr
 | D-58 | 2026-11-18 | README with setup, run, train and test instructions | ✅ |
 | D-59 | 2026-11-18 | Local deployment: `run.py` + `start.bat` start API and UI together on this PC | ✅ |
 | D-60 | 2026-11-18 | Hosting (Docker / cloud) postponed; decided after local use | 🔶 |
+| D-61 | 2026-11-18 | Quality check before a new model goes live; `--force` overrides | ✅ |
+| D-62 | 2026-11-18 | The running app switches to a new live model by itself (no restart) | ✅ |
+| D-63 | 2026-11-18 | Rejected models are kept (marked "not deployed"); unique folder names | ✅ |
 
 ---
 
@@ -647,3 +650,48 @@ something else) is decided **later**, after the app has been used locally.
 D-59), whether the API and UI run as one or two services, the UI's API address (`DA_ML_API_URL`, D-54), serving the
 Bootstrap CSS without a CDN if needed (D-53), HTTPS, and the limits in `MODEL_EXPLAINED.md` (population, EU medical
 device rules) if the public can use it.
+
+### D-61 — Quality check before a new model goes live
+**Date:** 2026-11-18
+**Decision:** After training, `python -m ml.train` only makes the new model live if it passes all of:
+- test ROC-AUC **≥ 0.80** (`MIN_ROC_AUC`),
+- test ROC-AUC **not more than 0.01 below the live model** (`MAX_ROC_AUC_DROP`, compared with the model named in
+  `models/latest.txt`; skipped if there is none),
+- recall at the chosen threshold on the test split **≥ 75%** (`MIN_RECALL`; the target is 80%, D-23).
+If it fails, the new model is still saved, but the live model stays, and the script prints the failed checks and
+exits with code **2** (0 = live, 1 = error). `--force` makes it live anyway. The result (`passed`, `failures`,
+`forced`, `compared_with`, `deployed`) is stored in the model's `metadata.json` under `quality_check`.
+**Why:** The team wants a full pipeline where training a new model deploys it automatically, and chose to deploy
+**only if it passes a check**. Without one, a bad dataset (e.g. answers coded differently but still within the
+allowed ranges, which validation can't catch) would silently put a worse model live. 0.01 is the same margin as the
+AutoML rule (D-10); it allows normal variation between datasets and test splits. 0.80 is just below the 0.819–0.826
+every reasonable model reached (`RESULTS.md`). 75% recall leaves room around the 80% target, because the threshold
+is chosen on cross-validation and lands at ~79.5% on the test split. Exit code 2 lets a script or scheduler see that
+nothing was deployed.
+
+### D-62 — Automatic switch in the running app
+**Date:** 2026-11-18
+**Decision:**
+- **Training** writes `models/latest.txt` only after the new model folder is completely saved, and replaces it in
+  one atomic step (`ml.train.activate`: write `latest.tmp`, then `os.replace`), so the API never reads a
+  half-written name.
+- **The API** (`ModelStore` in `api/main.py`) reads `models/latest.txt` on every request. When it names a different
+  model, the API loads it and switches to it; requests during loading still use the current model. If the new model
+  can't be loaded (missing or broken files), the current model keeps serving, the error is logged, and that model
+  isn't retried on every request. The API still refuses to **start** without a usable model.
+- **The UI** caches the threshold and "high" cut-off **per model** and fetches them again from `/model` when
+  `/predict` answers with a different model ID.
+This extends D-46 (`latest.txt` names the live model) and D-50 (the API loaded the model only at start-up).
+**Why:** The team's goal: "when I train a new model, everything just deploys in switch to that new model". With
+this, `python -m ml.train` is the only step; the app doesn't have to be restarted. Reading a one-line file per
+request costs microseconds. Keeping the old model when the new one is broken means a bad deployment can't take the
+app down. Checked on 2026-11-18 with the app running (`RESULTS.md`, step 8).
+
+### D-63 — Rejected models are kept; unique folder names
+**Date:** 2026-11-18
+**Decision:** A model that fails the quality check is still saved in `models/<run_id>/`, with
+`"deployed": false` in its metadata. If two runs start in the same second, the second folder gets a suffix (`_2`,
+`_3` …) instead of failing.
+**Why:** Keeping rejected models makes it possible to see *why* a run was rejected, and to put it live later after
+all, by writing its folder name into `latest.txt`, if the team decides the check was too strict for that data. Folders are ~0.6 MB; rejected ones can be deleted (or not
+committed, D-47) when no longer needed. Same-second runs can happen in scripted pipelines.

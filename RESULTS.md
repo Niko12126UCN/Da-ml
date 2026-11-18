@@ -255,6 +255,24 @@ with `run.py --check`); flake8 clean.
 - Starting a second time while the API was already running: "Port already in use: 127.0.0.1:5001. Is the app
   already running (another window)? Close it first." and exit code 1, without starting anything.
 
+## Step 8 — Automatic deployment of new models (2026-11-18)
+
+`python -m pytest tests`: **72 tests passed** (11 new: the quality check in 6 cases; good model → live, worse
+model → saved but not live, `--force` → live; same-second runs; the API switching models without a restart; the API
+keeping the old model when the new one is broken; the UI fetching the cut-offs again for a new model); flake8
+clean.
+
+Live check with the app running (`python run.py --no-browser`):
+
+| | Result |
+|---|---|
+| Before | `/health` → `catboost_20261118_084406` |
+| `python -m ml.train` (Kaggle CSV, ~2 min) | test ROC-AUC 0.8247, recall 79.6%, precision 33.0%; quality check passed (same scores as the live model) → "Now live: catboost_20261118_095453", exit code 0 |
+| After, **no restart** | `/health`, `/model` and `/predict` all answered with `catboost_20261118_095453` (threshold 0.1508; the example person 33.2% → high); API log: "Switched to model catboost_20261118_095453"; UI still answered |
+
+Afterwards `models/latest.txt` was set back to `catboost_20261118_084406` and the demo model folder deleted, so the
+repository is unchanged.
+
 ## Expected vs. actual
 
 Predictions from `Diabetes_Prediction_Feasibility.md` (written before any model was trained) compared with the

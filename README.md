@@ -48,11 +48,19 @@ trained model (`models/latest.txt` names it), so no training is needed first.
 ```
 python -m ml.train                            # the Kaggle CSV in data/raw_data/
 python -m ml.train --data path/to/file.csv    # any CSV in the same Diabetes_012 format
+python -m ml.train --data ... --force         # deploy even if the quality check fails
 ```
 
 This validates the data, trains CatBoost, picks the threshold for 80% recall, evaluates on a 20% test split and saves
-the model to a new folder `models/catboost_<date>_<time>/`. `models/latest.txt` is updated to point to it; restart
-the API to use it.
+the model to a new folder `models/catboost_<date>_<time>/`. Then a **quality check** decides whether it goes live:
+test ROC-AUC at least 0.80 and not more than 0.01 below the current model, and recall at least 75%.
+
+- **Passed:** `models/latest.txt` points to the new model, and a **running app switches to it by itself**; no
+  restart needed. Exit code 0.
+- **Failed:** the model is saved (marked "not deployed"), the current model stays live, and the reasons are
+  printed. Exit code 2.
+
+To go back to an earlier model, write its folder name into `models/latest.txt`; the running app switches to it too.
 
 ## Tests
 

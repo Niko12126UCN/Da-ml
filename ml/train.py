@@ -1,17 +1,20 @@
-"""Train the diabetes screening model (step 4 of PROJECT_PLAN.md).
+"""Train the diabetes screening model and deploy it if it passes the quality check (steps 4 and 8, PROJECT_PLAN.md).
 
 Validates a dataset in the BRFSS 2015 format, trains CatBoost with the settings chosen in Modeling.ipynb, picks the
 decision threshold for the recall target, evaluates once on the test split, and saves everything to a new folder
-`models/<run_id>/`. `models/latest.txt` then names that folder, so the API loads the newest model.
+`models/<run_id>/`. If the model passes the quality check (D-61), `models/latest.txt` is switched to it and a running
+API picks it up by itself (D-62); otherwise the live model stays and the reasons are printed.
 
 Usage (from the project root, in the da-ml environment):
     python -m ml.train
-    python -m ml.train --data path/to/dataset.csv --out models
+    python -m ml.train --data path/to/dataset.csv [--out models] [--force]
+Exit code: 0 = new model is live, 2 = trained but not deployed (quality check failed), 1 = error.
 """
 
 import argparse
 import hashlib
 import json
+import os
 import platform
 import sys
 import time
@@ -38,6 +41,11 @@ TEST_SIZE = 0.2          # D-24
 N_FOLDS = 5              # D-24
 TARGET_RECALL = 0.80     # D-23
 CATBOOST_PARAMS = {"iterations": 500, "learning_rate": 0.1, "depth": 6}   # D-21; ordinal codes as numbers (D-20)
+
+# Quality gate before a new model goes live (D-61)
+MIN_ROC_AUC = 0.80        # absolute minimum on the test split
+MAX_ROC_AUC_DROP = 0.01   # at most this much below the live model (same margin as D-10)
+MIN_RECALL = 0.75         # at the chosen threshold, on the test split (target is 80%, D-23)
 
 
 def make_target(df):
@@ -115,9 +123,47 @@ def train(df, params=None, n_folds=N_FOLDS, log=print):
     return model, info
 
 
-def save(model, info, out_dir, data_path):
-    """Save model + metadata to out_dir/<run_id>/ and point out_dir/latest.txt to it."""
-    run_id = datetime.now().strftime("catboost_%Y%m%d_%H%M%S")
+def current_metadata(out_dir):
+    """Metadata of the model that is live now (named in out_dir/latest.txt), or None if there is none."""
+    latest = Path(out_dir) / "latest.txt"
+    if not latest.exists():
+        return None
+    path = Path(out_dir) / latest.read_text(encoding="utf-8").strip() / "metadata.json"
+    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
+
+
+def quality_check(info, current=None):
+    """Quality gate before a new model goes live (D-61). Returns the list of failed checks (empty = passed)."""
+    test = info["metrics"]["test"]
+    failures = []
+    if test["roc_auc"] < MIN_ROC_AUC:
+        failures.append(f"test ROC-AUC {test['roc_auc']:.4f} is below the minimum of {MIN_ROC_AUC}")
+    if test["recall"] < MIN_RECALL:
+        failures.append(f"test recall {test['recall']:.1%} is below the minimum of {MIN_RECALL:.0%}")
+    if current is not None:
+        current_auc = current["metrics"]["test"]["roc_auc"]
+        if test["roc_auc"] < current_auc - MAX_ROC_AUC_DROP:
+            failures.append(f"test ROC-AUC {test['roc_auc']:.4f} is more than {MAX_ROC_AUC_DROP} below the live "
+                            f"model {current['run_id']} ({current_auc:.4f})")
+    return failures
+
+
+def activate(out_dir, run_id):
+    """Make run_id the live model: replace out_dir/latest.txt in one atomic step, so the API (which watches this
+    file) never reads a half-written name."""
+    latest = Path(out_dir) / "latest.txt"
+    tmp = latest.with_suffix(".tmp")
+    tmp.write_text(run_id + "\n", encoding="utf-8")
+    os.replace(tmp, latest)
+
+
+def save(model, info, out_dir, data_path, quality=None):
+    """Save model + metadata to out_dir/<run_id>/ (does not make it live; see activate). `quality` is the result of
+    the quality gate, stored in the metadata."""
+    base = datetime.now().strftime("catboost_%Y%m%d_%H%M%S")
+    run_id, n = base, 2
+    while (Path(out_dir) / run_id).exists():   # two runs in the same second
+        run_id, n = f"{base}_{n}", n + 1
     run_dir = Path(out_dir) / run_id
     run_dir.mkdir(parents=True, exist_ok=False)
     model.save_model(str(run_dir / "model.cbm"))
@@ -134,26 +180,44 @@ def save(model, info, out_dir, data_path):
         "data": {"file": data_path.name, "sha256": hashlib.sha256(data_path.read_bytes()).hexdigest()},
         "versions": {"python": platform.python_version(), "catboost": catboost.__version__,
                      "scikit-learn": sklearn.__version__, "pandas": pd.__version__, "numpy": np.__version__},
+        "quality_check": quality,
     }
     (run_dir / "metadata.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
-    (Path(out_dir) / "latest.txt").write_text(run_id + "\n", encoding="utf-8")
     return run_dir
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description="Train the diabetes screening model.")
+    parser = argparse.ArgumentParser(description="Train the diabetes screening model and, if it passes the "
+                                                 "quality check, make it live.")
     parser.add_argument("--data", default=DEFAULT_DATA, help="CSV in the BRFSS 2015 Diabetes_012 format")
     parser.add_argument("--out", default=DEFAULT_OUT, help="folder for trained models (default: models/)")
+    parser.add_argument("--force", action="store_true", help="make the new model live even if the check fails")
     args = parser.parse_args(argv)
 
     print(f"Reading {args.data}")
     model, info = train(pd.read_csv(args.data))
-    run_dir = save(model, info, args.out, args.data)
-
     test = info["metrics"]["test"]
     print(f"\nTest set: ROC-AUC {test['roc_auc']:.4f}, recall {test['recall']:.1%}, "
           f"precision {test['precision']:.1%}, flagged {test['share_flagged']:.1%}")
+
+    current = current_metadata(args.out)
+    failures = quality_check(info, current)
+    go_live = not failures or args.force
+    quality = {"passed": not failures, "failures": failures, "forced": bool(failures and args.force),
+               "compared_with": current["run_id"] if current else None, "deployed": go_live}
+    run_dir = save(model, info, args.out, args.data, quality)
     print(f"Saved to {run_dir}")
+
+    if failures:
+        print("\nQuality check FAILED:\n- " + "\n- ".join(failures))
+    if go_live:
+        activate(args.out, run_dir.name)
+        print(f"\nNow live: {run_dir.name}" + (" (forced)" if failures else "")
+              + ". A running app switches to it automatically.")
+        return 0
+    print(f"\nNOT deployed. The live model stays {current['run_id'] if current else '(none)'}. "
+          "Use --force to deploy anyway.")
+    return 2
 
 
 if __name__ == "__main__":

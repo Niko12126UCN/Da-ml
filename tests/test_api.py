@@ -1,6 +1,10 @@
+import json
+import shutil
+
 import pytest
 
-from api.main import MAX_PEOPLE, create_app
+from api.main import MAX_PEOPLE, MODELS_DIR, create_app
+from ml.train import activate
 from ml.risk import DISCLAIMER, HIGH_RISK, assess, risk_level
 from tests.test_validation import PERSON
 
@@ -13,6 +17,38 @@ HIGH_RISK_PERSON = {**PERSON, "BMI": 40, "GenHlth": 5, "DiffWalk": 1, "HeartDise
 @pytest.fixture(scope="module")
 def client():
     return create_app().test_client()
+
+
+@pytest.fixture
+def two_models(tmp_path):
+    """A models folder with two copies of the committed model: model_a (live) and model_b (other threshold)."""
+    live = MODELS_DIR / (MODELS_DIR / "latest.txt").read_text().strip()
+    for run_id, threshold in [("model_a", 0.15), ("model_b", 0.10)]:
+        shutil.copytree(live, tmp_path / run_id)
+        metadata_file = tmp_path / run_id / "metadata.json"
+        metadata = json.loads(metadata_file.read_text(encoding="utf-8"))
+        metadata.update(run_id=run_id, threshold=threshold)
+        metadata_file.write_text(json.dumps(metadata), encoding="utf-8")
+    (tmp_path / "latest.txt").write_text("model_a\n")
+    return tmp_path
+
+
+def test_api_switches_to_a_new_model_without_restart(two_models):
+    client = create_app(two_models).test_client()
+    assert client.get("/health").get_json()["model"] == "model_a"
+    assert client.get("/model").get_json()["threshold"] == 0.15
+
+    activate(two_models, "model_b")                     # what ml.train does when a new model passes
+    assert client.get("/health").get_json()["model"] == "model_b"
+    assert client.get("/model").get_json()["threshold"] == 0.10
+    assert client.post("/predict", json=PERSON).get_json()["model"] == "model_b"
+
+
+def test_api_keeps_serving_if_the_new_model_is_broken(two_models):
+    client = create_app(two_models).test_client()
+    activate(two_models, "model_missing")               # latest.txt names a model that can't be loaded
+    assert client.get("/health").get_json()["model"] == "model_a"
+    assert client.post("/predict", json=PERSON).status_code == 200
 
 
 # --- risk levels ---

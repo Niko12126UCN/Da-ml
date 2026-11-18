@@ -161,11 +161,13 @@ def layout():
 _cutoffs = {}
 
 
-def cutoffs():
-    """Screening threshold and 'high' cut-off from the API's /model (cached after the first success)."""
-    if not _cutoffs:
+def cutoffs(model_id):
+    """Screening threshold and 'high' cut-off of the given model, from the API's /model. Cached per model, so they
+    are fetched again when the API has switched to a new model (D-62)."""
+    if _cutoffs.get("model") != model_id:
         info = requests.get(f"{API_BASE}/model", timeout=5).json()
-        _cutoffs.update(threshold=info["threshold"], high_risk=info["high_risk"])
+        _cutoffs.clear()
+        _cutoffs.update(model=info["model"], threshold=info["threshold"], high_risk=info["high_risk"])
     return _cutoffs["threshold"], _cutoffs["high_risk"]
 
 
@@ -243,7 +245,8 @@ def check_risk(_, *values):
             return render_problems("Some answers could not be used:",
                                    [friendly_error(e, payload) for e in response.json()["errors"]])
         response.raise_for_status()
-        return render_result(response.json(), *cutoffs())
+        body = response.json()
+        return render_result(body, *cutoffs(body["model"]))
     except requests.RequestException:
         return render_problems("The risk service is not available.",
                                [f"Is the API running? Start it with `python -m api.main` ({API_BASE})."])

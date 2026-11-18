@@ -62,6 +62,27 @@ def test_marker_position(probability, position):
     assert marker_position(probability, threshold=0.15, high_risk=0.30) == pytest.approx(position)
 
 
+def test_cutoffs_are_fetched_again_when_the_model_changes(monkeypatch):
+    import ui.app
+    calls = []
+    answers = {"model_a": 0.15, "model_b": 0.10}
+
+    class FakeResponse:
+        def __init__(self, model):
+            self.model = model
+
+        def json(self):
+            return {"model": self.model, "threshold": answers[self.model], "high_risk": 0.30}
+
+    live = {"model": "model_a"}
+    monkeypatch.setattr(ui.app.requests, "get", lambda *a, **k: calls.append(1) or FakeResponse(live["model"]))
+    monkeypatch.setattr(ui.app, "_cutoffs", {})
+    assert ui.app.cutoffs("model_a") == (0.15, 0.30)
+    assert ui.app.cutoffs("model_a") == (0.15, 0.30) and len(calls) == 1     # cached
+    live["model"] = "model_b"
+    assert ui.app.cutoffs("model_b") == (0.10, 0.30) and len(calls) == 2     # new model -> fetched again
+
+
 def test_render_result_and_layout_build():
     body = {"probability": 0.33, "risk_level": "high", "message": "msg", "disclaimer": "disc"}
     assert render_result(body, 0.151, 0.30) is not None
