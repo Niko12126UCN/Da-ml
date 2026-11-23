@@ -1,6 +1,7 @@
 """Train the diabetes screening model and deploy it if it passes the quality check (steps 4 and 8, PROJECT_PLAN.md).
 
-Validates a dataset in the BRFSS 2015 format, trains CatBoost with the settings chosen in Modeling.ipynb, picks the
+Validates a dataset in the BRFSS 2015 format, removes rows with BMI >= 70 (suspected data errors, D-83) before the
+split, trains CatBoost with the settings chosen in Modeling.ipynb, picks the
 decision threshold for the recall target, evaluates once on the test split, and saves everything to a new folder
 `models/<run_id>/`. If the model passes the quality check (D-61), `models/latest.txt` is switched to it and a running
 API picks it up by itself (D-62); otherwise the live model stays and the reasons are printed.
@@ -46,6 +47,7 @@ TEST_SIZE = 0.2          # D-24
 N_FOLDS = 5              # D-24
 TARGET_RECALL = 0.80     # D-23
 CATBOOST_PARAMS = {"iterations": 500, "learning_rate": 0.1, "depth": 6}   # D-21; ordinal codes as numbers (D-20)
+MAX_TRAINING_BMI = 70     # rows with BMI >= this are suspected data errors and not trained on (D-83, D-86)
 
 # Quality gate before a new model goes live (D-61)
 MIN_ROC_AUC = 0.80        # absolute minimum on the test split
@@ -56,6 +58,13 @@ MIN_RECALL = 0.75         # at the chosen threshold, on the test split (target i
 def make_target(df):
     """1 = prediabetes or diabetes, 0 = no diabetes (D-08)."""
     return (df[TARGET_COLUMN] > 0).astype(int).rename("diabetes")
+
+
+def drop_suspected_errors(df):
+    """Remove rows with BMI >= MAX_TRAINING_BMI (D-83). Done after validation and before the split, like all data
+    cleaning (D-86); a fixed rule, not fitted on the data, so it can't leak test information. Keeps the row index."""
+    keep = df["BMI"] < MAX_TRAINING_BMI
+    return df[keep], int((~keep).sum())
 
 
 def split(X, y):
@@ -94,6 +103,9 @@ def train(df, params=None, n_folds=N_FOLDS, log=print):
     """Validate, split, choose the threshold on out-of-fold predictions, train and evaluate.
     Returns (model, info) where info holds the threshold, metrics and row counts."""
     df = validate_training_data(df)
+    rows_in = len(df)
+    df, removed = drop_suspected_errors(df)
+    log(f"Removed {removed:,} rows with BMI >= {MAX_TRAINING_BMI} (suspected data errors, D-83)")
     X, y = df[FEATURE_COLUMNS], make_target(df)
     X_train, X_test, y_train, y_test = split(X, y)
     log(f"Train: {len(X_train):,} rows ({y_train.mean():.1%} positive), "
@@ -124,9 +136,10 @@ def train(df, params=None, n_folds=N_FOLDS, log=print):
         # what the training data and the predictions looked like, for monitoring (D-73); saved as reference.json
         "reference": build_reference(X_train, test_proba, threshold, HIGH_RISK),
         "rows": {"total": len(df), "train": len(X_train), "test": len(X_test),
-                 "positive_share": float(y.mean())},
+                 "positive_share": float(y.mean()), "input": rows_in, "removed_bmi_too_high": removed},
         "settings": {"model": "CatBoostClassifier", "params": params or CATBOOST_PARAMS, "seed": SEED,
-                     "test_size": TEST_SIZE, "n_folds": n_folds, "balancing": "none"},
+                     "test_size": TEST_SIZE, "n_folds": n_folds, "balancing": "none",
+                     "max_training_bmi": MAX_TRAINING_BMI},
     }
     return model, info
 

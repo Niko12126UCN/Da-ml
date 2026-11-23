@@ -2,7 +2,8 @@
 
 How the model turns a person's survey answers into a risk percentage and a message, why the approach is sound,
 how the live model is monitored (section 7), and where the limits are. The worked example uses the model
-`catboost_20261118_084406`; later models trained on the same data give the same numbers.
+`catboost_20261118_084406` (trained on all rows). The live model since 2026-11-23, `catboost_20261123_132346`, is
+trained without the 599 rows with BMI ≥ 70 (D-83) and gives the same person 33.7% instead of 33.2%.
 
 Related documents: [`PROJECT_PLAN.md`](PROJECT_PLAN.md) (plan) · [`DECISIONS.md`](DECISIONS.md) (what was decided
 and why) · [`RESULTS.md`](RESULTS.md) (all measurements) ·
@@ -160,6 +161,10 @@ These are limits of the data and the scope, not flaws in the method:
   about the person's body. It cannot diagnose (D-07).
 - **Snapshot, not a forecast.** The survey shows who has diabetes now, not who will develop it. Some answers
   (heart disease, difficulty walking, poor general health) may be *results* of diabetes rather than causes.
+- **Very high BMI.** The 599 rows with BMI ≥ 70 in the survey were suspected data errors (their diabetes rate and
+  health profile match normal-weight people) and are not trained on (D-83). The model has therefore never seen a
+  real BMI above 69: for higher values it gives the risk of BMI 69 (about 27% for the average test person), not a
+  higher one. The input validation still accepts BMI up to 98 (D-38).
 - **Slight overestimation at the top.** Above ~60%, predictions are a little too high (68% predicted vs. 64% actual).
   Minor; could be corrected with an extra calibration step if it ever matters.
 - **A low result doesn't rule anything out.** 20% of people with prediabetes/diabetes are in the "low" group, which

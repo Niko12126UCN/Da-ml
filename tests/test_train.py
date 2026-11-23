@@ -6,10 +6,11 @@ import pytest
 from catboost import CatBoostClassifier
 
 import ml.train
-from ml.train import DEFAULT_DATA, activate, main, make_target, quality_check, save, split, train
+from ml.train import (DEFAULT_DATA, MAX_TRAINING_BMI, activate, drop_suspected_errors, main, make_target,
+                      quality_check, save, split, train)
 from ml.validation import FEATURE_COLUMNS, ValidationError, validate_training_data
 
-SPLIT_FILE = Path(__file__).resolve().parents[1] / "data" / "splits" / "train_test_split.csv"
+SPLIT_FILE = Path(__file__).resolve().parents[1] / "data" / "splits" / "train_test_split_bmi_lt70.csv"   # D-86
 FAST_PARAMS = {"iterations": 20, "learning_rate": 0.3, "depth": 4}
 
 
@@ -19,14 +20,30 @@ def raw():
 
 
 def test_split_matches_shared_split_file(raw):
-    df = validate_training_data(raw)
+    df, _ = drop_suspected_errors(validate_training_data(raw))
     _, X_test, _, _ = split(df[FEATURE_COLUMNS], make_target(df))
     shared = pd.read_csv(SPLIT_FILE, index_col="row")["split"]
     assert set(X_test.index) == set(shared[shared == "test"].index)
+    assert set(shared.index) == set(df.index)      # every cleaned row is in the file, no removed row is
+
+
+def test_drop_suspected_errors(raw):
+    df = validate_training_data(raw)
+    clean, removed = drop_suspected_errors(df)
+    assert removed == 599 == (df["BMI"] >= MAX_TRAINING_BMI).sum()      # D-83
+    assert clean["BMI"].max() == MAX_TRAINING_BMI - 1 and len(clean) == len(df) - removed
+    assert clean.index.isin(df.index).all()                             # row numbers kept (shared split file)
+
+
+def test_train_records_removed_rows(raw):
+    sample = pd.concat([raw[raw["BMI"] < 70].sample(1990, random_state=0), raw[raw["BMI"] >= 70].head(10)])
+    _, info = train(sample, params=FAST_PARAMS, n_folds=3, log=lambda *_: None)
+    assert info["rows"]["input"] == 2000 and info["rows"]["removed_bmi_too_high"] == 10
+    assert info["rows"]["total"] == 1990 and info["settings"]["max_training_bmi"] == MAX_TRAINING_BMI
 
 
 def test_train_and_save_end_to_end(raw, tmp_path):
-    sample = raw.sample(5000, random_state=0)
+    sample = raw[raw["BMI"] < 70].sample(5000, random_state=0)
     sample_csv = tmp_path / "sample.csv"
     sample.to_csv(sample_csv, index=False)
 
@@ -35,7 +52,7 @@ def test_train_and_save_end_to_end(raw, tmp_path):
     assert info["metrics"]["cross_validation"]["recall"] >= 0.80     # threshold chosen for 80% recall
     assert info["metrics"]["test"]["roc_auc"] > 0.7
     assert info["rows"] == {"total": 5000, "train": 4000, "test": 1000, "positive_share": pytest.approx(
-        (sample["Diabetes_012"] > 0).mean())}
+        (sample["Diabetes_012"] > 0).mean()), "input": 5000, "removed_bmi_too_high": 0}
 
     run_dir = save(model, info, tmp_path / "models", sample_csv)
     assert not (tmp_path / "models" / "latest.txt").exists()          # saving alone doesn't make it live
@@ -76,7 +93,7 @@ def test_quality_check(roc_auc, recall, current, n_failures):
 def quick_training(raw, tmp_path, monkeypatch):
     """Run main() fast on a small sample, with the test ROC-AUC set to a chosen value."""
     sample_csv = tmp_path / "sample.csv"
-    raw.sample(3000, random_state=0).to_csv(sample_csv, index=False)
+    raw[raw["BMI"] < 70].sample(3000, random_state=0).to_csv(sample_csv, index=False)   # no rows removed (D-83)
     real_train = ml.train.train
 
     def run(roc_auc, *flags):

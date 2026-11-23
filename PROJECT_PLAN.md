@@ -43,16 +43,17 @@ Build a complete pipeline that can:
 | 12. Closing the loop: label question, "retraining recommended", `--with-user-data` | ✅ Done (2026-11-18) |
 | **Extended abstract** | |
 | 13. Supplementary analyses (`ml/notebooks/Supplementary.ipynb`, D-82): confusion matrix, outliers ✅; feature selection, tuning: full run pending | 🔶 In progress (2026-11-23) |
-| Remove BMI ≥ 70 from training (D-83) + new model through the quality check | ⬜ Decided, not implemented |
+| Remove BMI ≥ 70 before the split (D-83, D-86) → new live model `catboost_20261123_132346` | ✅ Done (2026-11-23) |
 | Feature engineering tested: no engineered features (D-84) | ✅ Done (2026-11-23) |
 
 ### Before the abstract is final (D-85: do this once, at the end)
 
-1. Implement every change decided for the abstract in `ml/train.py` (so far: D-83, drop BMI ≥ 70) + tests.
-2. Retrain (`python -m ml.train`); the new model must pass the quality check (D-61).
-3. Point `Supplementary.ipynb` at the same data (BMI ≥ 70 removed in sections 3–4) and run it in full (~1 hour),
-   including the feature engineering section (D-84) and the logistic regression check on the cleaned data.
-4. Update the numbers in `RESULTS.md`, the BMI figure (new model in panel B, if wanted) and the abstract.
+1. ✅ Implement every change decided for the abstract in `ml/train.py` (D-83, drop BMI ≥ 70 before the split, D-86)
+   + tests (118 passed, flake8 clean).
+2. ✅ Retrain (`python -m ml.train`): `catboost_20261123_132346`, quality check passed, live.
+3. ⏳ `Supplementary.ipynb` uses the cleaned data and split (outliers on the raw data) and is running in full
+   (started 2026-11-23 13:31), including feature engineering (D-84) and the old-vs-new model check.
+4. ⬜ Update the numbers in `RESULTS.md`, the figures for the report and the abstract.
 
 ## 3. Model selection approach
 
@@ -159,7 +160,8 @@ Mirrors the `ml-taxi-pipeline` reference project (Flask API + Dash UI):
 Da-ml/
 ├── data/
 │   ├── raw_data/                  # the three Kaggle CSVs
-│   ├── splits/train_test_split.csv  # shared 80/20 split used by the notebooks (D-32)
+│   ├── splits/train_test_split.csv  # shared 80/20 split of all rows: Modeling + AutoML notebooks (D-32)
+│   ├── splits/train_test_split_bmi_lt70.csv  # split without BMI ≥ 70: ml/train.py, Supplementary (D-86)
 │   ├── store.db                   # data store: predictions (opt-in), requests, training runs — NOT in git (D-70)
 │   └── training_sets/             # combined Kaggle + user data used for training — NOT in git (D-80)
 ├── ml/

@@ -90,9 +90,10 @@ Newest decisions are at the bottom. If a decision is changed later, the old entr
 | D-80 | 2026-11-18 | `ml.train --with-user-data`: original dataset + all labelled user rows | ✅ |
 | D-81 | 2026-11-18 | Drift → "Retraining recommended" on the dashboard and in the report; retraining is started by hand | ✅ |
 | D-82 | 2026-11-23 | Supplementary analyses for the extended abstract in `ml/notebooks/Supplementary.ipynb` | 🔶 |
-| D-83 | 2026-11-23 | Remove rows with BMI ≥ 70 from training (suspected data errors) | ✅ (not yet implemented) |
+| D-83 | 2026-11-23 | Remove rows with BMI ≥ 70 from training (suspected data errors) | ✅ |
 | D-84 | 2026-11-23 | No engineered features (tested: no gain for CatBoost) | ✅ |
 | D-85 | 2026-11-23 | Retrain and re-run all analyses once, at the end of the abstract work | ✅ |
+| D-86 | 2026-11-23 | BMI ≥ 70 removed before the train/test split; new shared split file | ✅ |
 
 ---
 
@@ -966,8 +967,8 @@ Whether a better tuning result changes the deployed model is a separate team dec
 **Decision:** The 599 rows (0.24%) with BMI 70–98 are treated as suspected data errors and **removed from the training
 data**. The input validation keeps accepting BMI 12–98 (D-38): a user with a real BMI above 70 still gets a
 prediction, and because tree models extend flat beyond the highest value they have seen, it will be the risk of the
-highest trusted BMI rather than a lower one. **Not yet implemented** in `ml/train.py`; a new model must then be
-trained and pass the quality check (D-61).
+highest trusted BMI rather than a lower one. **Implemented 2026-11-23** in `ml/train.py` (`drop_suspected_errors`,
+before the split, see D-86); new live model `catboost_20261123_132346`.
 **Why:** Found by the outlier analysis (D-82, `RESULTS.md` step 13). Four signs that these rows are errors, not real
 people: (1) the diabetes rate falls from 51% at BMI 65–69 to 15.5% at BMI 70–98, the level of BMI 25–29; (2) their
 health profile matches normal-weight people (general health 2.6 and 22% difficulty walking, vs. 3.9 and 74% at BMI
@@ -999,3 +1000,24 @@ new data. Until then the live model stays `catboost_20261118_100430`.
 **Why:** The team's decision: more changes may follow while the remaining gaps are discussed, and retraining plus
 the ~1-hour notebook run should only be done once. The checklist is in `PROJECT_PLAN.md` ("Before the abstract is
 final").
+
+### D-86 — Remove BMI ≥ 70 before the split; new shared split file
+**Date:** 2026-11-23
+**Decision:** `ml/train.py` removes the rows with BMI ≥ 70 (`MAX_TRAINING_BMI = 70`, D-83) right after validation and
+**before** the 80/20 split, so both the training and the test rows are clean (253,081 rows: 202,464 train, 50,617
+test, both 15.76% positive). The number removed is stored in `metadata.json` (`rows.input`,
+`rows.removed_bmi_too_high`, `settings.max_training_bmi`). The cleaned split is saved as
+`data/splits/train_test_split_bmi_lt70.csv` (same format as D-32); `tests/test_train.py` and `Supplementary.ipynb`
+use it. The old `data/splits/train_test_split.csv` stays unchanged, because `Modeling.ipynb` and `AutoML.ipynb`
+(steps 1–2) were run on all rows and their results are kept as history. The validation still accepts BMI 12–98 for
+predictions (D-38), and labelled user rows (D-80) go through the same filter.
+**Why:** The team asked to follow the course: in data preparation, outliers are handled (clip/remove) before the
+data is split into train and test sets. The one exception taught is that values **computed from the data** (e.g. a
+median used to fill gaps) must be fitted on the training rows only; BMI ≥ 70 is a fixed rule, so it cannot leak
+test information. The alternative (remove only from the training part) would have kept the old test set but left
+~120 error rows in it.
+**Consequence:** the test set changed, so test scores are not directly comparable with the old model's. Compared on
+the 11,139 rows that **neither** model trained on: old model ROC-AUC 0.8196, new 0.8202 (PR-AUC 0.4693 vs. 0.4739,
+recall 79.5% vs. 79.7%, precision 34.2% both). On the whole new test set the old model looks better (0.8381), but
+only because it trained on 39,478 of those rows. The quality check (D-61) compared the new test ROC-AUC (0.8263) with
+the old model's stored one (0.8247, other test rows) and passed.

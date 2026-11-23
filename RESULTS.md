@@ -439,6 +439,46 @@ learn interactions by itself. → **No engineered features** (D-84). Side note: 
 vs. 0.8192 on all rows in step 1, possibly because the BMI ≥ 70 rows distort its single BMI weight; different rows
 and folds, so to be checked in the final run (D-85).
 
+## Step 14 — Retrained without BMI ≥ 70 (`ml/train.py`, 2026-11-23)
+
+`python -m pytest tests`: **118 tests passed** (2 new: the filter removes exactly the 599 rows and keeps row numbers;
+training records the removed rows); flake8 clean. New shared split `data/splits/train_test_split_bmi_lt70.csv` (D-86).
+
+`python -m ml.train` → `models/catboost_20261123_132346/` (model.cbm 564 KB), quality check passed → **live**:
+253,680 rows in, 599 removed (BMI ≥ 70), 253,081 used: 202,464 train / 50,617 test, both 15.76% positive.
+
+| | ROC-AUC | PR-AUC | Precision @ 80% recall | Brier | Threshold | Recall | Precision | F1 | Accuracy | Flagged |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Cross-validation (out-of-fold) | 0.8240 | 0.4550 | 0.3296 | 0.1063 | 0.1507 | 80.0% | 33.0% | 0.467 | 71.2% | 38.3% |
+| **Test set** | **0.8263** | 0.4599 | 0.3308 | 0.1057 | 0.1507 | **80.1%** | **33.1%** | 0.468 | 71.3% | 38.2% |
+
+Confusion matrix on the new test set (50,617): TP 6,389, FN 1,588, FP 12,935, TN 29,705; specificity 69.7%,
+2.02 false positives per true positive.
+
+### Old vs. new model
+
+The test sets differ, so the test scores above are **not** comparable with the old model's 0.8247. On the 11,139 rows
+that **neither** model trained on (16.8% positive, no BMI ≥ 70):
+
+| Model | ROC-AUC | PR-AUC | Recall | Precision | F1 |
+|---|---|---|---|---|---|
+| Old `catboost_20261118_100430` (trained with BMI ≥ 70) | 0.8196 | 0.4693 | 79.5% | 34.2% | 0.478 |
+| **New `catboost_20261123_132346`** | **0.8202** | **0.4739** | 79.7% | 34.2% | 0.479 |
+
+On the whole new test set the old model scores 0.8381, but it trained on 39,478 of those 50,617 rows, so that number
+is inflated and not used.
+
+**Predicted risk when only BMI changes** (same 5,000 test people):
+
+| BMI | 30 | 50 | 65 | 69 | 70 | 75 | 80 | 90 |
+|---|---|---|---|---|---|---|---|---|
+| Old model | 16.7% | 28.9% | 33.4% | 27.6% | **16.8%** | **13.6%** | **14.1%** | **12.6%** |
+| New model | 16.7% | 30.2% | 32.4% | 26.9% | 26.9% | 26.9% | 26.9% | 26.9% |
+
+**Findings:** the error is gone: above BMI 69 the new model keeps the risk of the highest trusted BMI instead of
+dropping to the level of BMI 25–30. Performance is the same or slightly better (+0.0006 ROC-AUC, +0.005 PR-AUC on
+rows unseen by both). Removing 0.24% of the rows did not change the class balance (15.76% before and after).
+
 ## Expected vs. actual
 
 Predictions from `Diabetes_Prediction_Feasibility.md` (written before any model was trained) compared with the
