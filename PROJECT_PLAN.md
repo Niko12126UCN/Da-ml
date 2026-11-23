@@ -42,7 +42,7 @@ Build a complete pipeline that can:
 | 11. Real-time dashboard (`/dashboard`, API `/monitoring`) | ✅ Done (2026-11-18) |
 | 12. Closing the loop: label question, "retraining recommended", `--with-user-data` | ✅ Done (2026-11-18) |
 | **Extended abstract** | |
-| 13. Supplementary analyses (`ml/notebooks/Supplementary.ipynb`, D-82): confusion matrix, outliers ✅; feature selection, tuning: full run pending | 🔶 In progress (2026-11-23) |
+| 13. Supplementary analyses (`ml/notebooks/Supplementary.ipynb`, D-82): confusion matrix, outliers, feature selection, feature engineering, tuning | ✅ Done (2026-11-23) |
 | Remove BMI ≥ 70 before the split (D-83, D-86) → new live model `catboost_20261123_132346` | ✅ Done (2026-11-23) |
 | Feature engineering tested: no engineered features (D-84) | ✅ Done (2026-11-23) |
 
@@ -51,8 +51,8 @@ Build a complete pipeline that can:
 1. ✅ Implement every change decided for the abstract in `ml/train.py` (D-83, drop BMI ≥ 70 before the split, D-86)
    + tests (118 passed, flake8 clean).
 2. ✅ Retrain (`python -m ml.train`): `catboost_20261123_132346`, quality check passed, live.
-3. ⏳ `Supplementary.ipynb` uses the cleaned data and split (outliers on the raw data) and is running in full
-   (started 2026-11-23 13:31), including feature engineering (D-84) and the old-vs-new model check.
+3. ✅ `Supplementary.ipynb` run in full on the cleaned data and split (outliers on the raw data), 2026-11-23
+   13:31–15:00, including feature engineering (D-84) and the old-vs-new model check (`RESULTS.md`, steps 13–14).
 4. ⬜ Update the numbers in `RESULTS.md`, the figures for the report and the abstract.
 
 ## 3. Model selection approach

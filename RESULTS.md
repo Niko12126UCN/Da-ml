@@ -366,10 +366,36 @@ combined data; real users would be new people.
 
 ## Step 13 — Supplementary analyses (`ml/notebooks/Supplementary.ipynb`, 2026-11-23)
 
-Checks from the course method for the extended abstract (D-82). Sections 1–2 below are final (they train nothing);
-the feature selection and tuning results (sections 3–4) follow when the full run has been done.
+Checks from the course method for the extended abstract (D-82). Full run 2026-11-23, 13:31–15:00 (grid search 80.5
+min). The outlier screening uses the raw data (all 253,680 rows); it found the BMI ≥ 70 errors, which were then
+removed before the split (D-83, D-86). Everything else uses the cleaned data (253,081 rows, split
+`train_test_split_bmi_lt70.csv`) and the live model `catboost_20261123_132346` (step 14). The confusion matrix and
+outlier tables of the **first** version (old model, training rows only) are kept below the final ones as history.
 
-### Confusion matrix of the live model (test set, 50,736 people)
+### Confusion matrix of the live model, final (`catboost_20261123_132346`, cleaned test set, 50,617 people)
+
+| | Flagged (see a doctor) | Not flagged | Total |
+|---|---|---|---|
+| **Has prediabetes/diabetes** | 6,389 | 1,588 | 7,977 |
+| **Does not** | 12,935 | 29,705 | 42,640 |
+| **Total** | 19,324 | 31,293 | 50,617 |
+
+Recall 80.1%, precision 33.1%, specificity 69.7%, flagged 38.2%, F1 0.468, accuracy 71.3%: **2.02 false positives
+per true positive**. Figure (Danish, for the report): `confusion_matrix.png/.pdf`.
+
+### Outliers, final: Z-score and IQR (raw data, all 253,680 rows)
+
+| Feature | Median | Q3 | Max | Skewness | \|z\| > 3 | IQR k = 1.5 | IQR k = 3 | Share of zeros |
+|---|---|---|---|---|---|---|---|---|
+| BMI | 27 | 31 | 98 | 2.12 | 1.2% (> 48.2) | 3.9% (> 41.5) | 0.7% (> 52) | 0% |
+| MentHlth | 0 | 2 | 30 | 2.72 | 5.0% | 14.3% | 12.4% | 69.3% |
+| PhysHlth | 0 | 3 | 30 | 2.21 | 0.0% | 16.1% | 13.3% | 63.1% |
+
+Diabetes rate by bad days: physically 12.0% (0 days), 17.6% (1–14), 29.8% (15–29), 32.4% (30); mentally 15.0%,
+14.7%, 21.8%, 25.9%. BMI IQR outliers below 70: diabetes rate 37.5% (BMI 41.5–50) and 43.0% (50–70); BMI 70–98:
+15.5% (599 rows). The interpretation below is unchanged.
+
+### First version (old model `catboost_20261118_100430`, test set of all rows, 50,736 people)
 
 `catboost_20261118_100430`, saved threshold 0.1508 (80% recall on out-of-fold predictions, D-23); test ROC-AUC 0.8247.
 
@@ -383,7 +409,7 @@ Recall 79.6%, precision 33.0%, specificity 69.8%, flagged 38.0%: **about 2 false
 the exact counts for the live model; the "caught / missed / false alarms" table in step 2 was derived from rounded
 percentages of the CatBoost retrained in `AutoML.ipynb`.
 
-### Outliers: Z-score and IQR (training rows)
+### First version: outliers on the training rows (202,944) only
 
 Only the three numeric features can have outliers; the 18 binary/coded features are range-checked by the validation.
 
@@ -423,6 +449,60 @@ A user entering BMI 75 gets about the risk of BMI 30. The curve is noisy between
 e.g. 19 at BMI 65). → **Remove BMI ≥ 70 from training** (D-83). Figure: `bmi_outlier_fund.png/.pdf` (Danish, for the
 report).
 
+### Feature selection: ANOVA F-test (training rows, cleaned data)
+
+All 21 features differ significantly between the classes (p < 0.001; smallest F: AnyHealthcare 38, p = 7e-10).
+
+| Rank | Feature | F-score | Spearman | | Rank | Feature | F-score | Spearman |
+|---|---|---|---|---|---|---|---|---|
+| 1 | GenHlth | 20,058 | +0.295 | | 12 | Stroke | 2,240 | +0.105 |
+| 2 | HighBP | 15,800 | +0.269 | | 13 | MentHlth | 1,091 | +0.044 |
+| 3 | BMI | 12,927 | +0.237 | | 14 | CholCheck | 963 | +0.069 |
+| 4 | DiffWalk | 10,367 | +0.221 | | 15 | Smoker | 814 | +0.063 |
+| 5 | HighChol | 9,276 | +0.209 | | 16 | Veggies | 708 | −0.059 |
+| 6 | Age | 7,320 | +0.187 | | 17 | HvyAlcoholConsump | 642 | −0.056 |
+| 7 | HeartDiseaseorAttack | 6,482 | +0.176 | | 18 | Fruits | 335 | −0.041 |
+| 8 | PhysHlth | 6,255 | +0.160 | | 19 | NoDocbcCost | 310 | +0.039 |
+| 9 | Income | 6,105 | −0.171 | | 20 | Sex | 202 | +0.032 |
+| 10 | Education | 3,554 | −0.126 | | 21 | AnyHealthcare | 38 | +0.014 |
+| 11 | PhysActivity | 2,973 | −0.120 | | | | | |
+
+**Top-k features by F-score** (CatBoost, default settings, 5-fold CV):
+
+| Features | ROC-AUC | PR-AUC | Precision @ 80% recall |
+|---|---|---|---|
+| Top 5 (GenHlth, HighBP, BMI, DiffWalk, HighChol) | 0.8020 | 0.4274 | 0.3030 |
+| Top 10 | 0.8192 | 0.4476 | 0.3221 |
+| Top 15 | 0.8212 | 0.4493 | 0.3250 |
+| **All 21** | **0.8241** | **0.4552** | **0.3297** |
+
+**Finding:** every extra group of questions still adds a little; even the 6 weakest features together add +0.003
+ROC-AUC. The F-test ranks features one at a time, but the model uses them in combination.
+
+### Hyperparameter tuning: GridSearchCV (36 combinations × 5 folds, training rows, cleaned data)
+
+| | depth | learning_rate | iterations | l2_leaf_reg | CV ROC-AUC | Train ROC-AUC | Train − CV | Rank |
+|---|---|---|---|---|---|---|---|---|
+| **Best** | 6 | 0.05 | 500 | 10 | **0.8256** | 0.8357 | 0.010 | 1 |
+| | 4 | 0.05 | 1000 | 3 | 0.8255 | 0.8324 | 0.007 | 2 |
+| | 4 | 0.05 | 500 | 3 | 0.8255 | 0.8293 | 0.004 | 3 |
+| **Default (D-21)** | 6 | 0.1 | 500 | 3 | 0.8240 | – | – | 21 |
+| Worst | 8 | 0.1 | 1000 | 1 | 0.8118 | 0.9023 | 0.091 | 36 |
+
+Spread of all 36: 0.8118–0.8256; the top 10 lie within 0.0003 of each other (0.8253–0.8256). Best vs. default:
+**+0.0016 CV ROC-AUC**. Deep trees with many steps overfit clearly (depth 8, lr 0.1, 1,000 trees: train 0.90, CV
+0.81).
+
+**Best setting on the test set** (threshold for 80% recall on its own out-of-fold predictions):
+
+| Model | ROC-AUC | PR-AUC | Threshold | Recall | Precision | F1 | Flagged | False alarms |
+|---|---|---|---|---|---|---|---|---|
+| Default (live model) | 0.8263 | 0.4599 | 0.1507 | 80.1% | 33.1% | 0.468 | 38.2% | 12,935 |
+| Tuned (depth 6, lr 0.05, 500, l2 10) | 0.8271 | 0.4630 | 0.1532 | 80.1% | 33.2% | 0.470 | 38.0% | 12,843 |
+
+**Finding:** +0.0008 test ROC-AUC, 92 fewer false alarms among 50,617 people (0.18%). Far below the +0.01 that was
+agreed as the margin for switching models (D-10).
+
 ### Feature engineering (5-fold CV, training rows without BMI ≥ 70: 202,464 rows, 15.76% positive)
 
 Engineered: `n_conditions`, `bad_days`, `lifestyle_score`, HighBP × HighChol, BMI × Age, GenHlth × Age (D-84).
@@ -437,7 +517,7 @@ Engineered: `n_conditions`, `bad_days`, `lifestyle_score`, HighBP × HighChol, B
 **Finding:** no gain for CatBoost (ROC-AUC ±0.0000, PR-AUC −0.0014); +0.0010 for logistic regression, which cannot
 learn interactions by itself. → **No engineered features** (D-84). Side note: logistic regression scored 0.8207 here
 vs. 0.8192 on all rows in step 1, possibly because the BMI ≥ 70 rows distort its single BMI weight; different rows
-and folds, so to be checked in the final run (D-85).
+and folds, so not a controlled comparison. The final run gave the same numbers (cleaned data).
 
 ## Step 14 — Retrained without BMI ≥ 70 (`ml/train.py`, 2026-11-23)
 

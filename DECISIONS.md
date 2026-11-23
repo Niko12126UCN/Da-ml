@@ -89,11 +89,13 @@ Newest decisions are at the bottom. If a decision is changed later, the old entr
 | D-79 | 2026-11-18 | Optional question "Has a doctor ever told you …?" gives stored user rows a label | ✅ |
 | D-80 | 2026-11-18 | `ml.train --with-user-data`: original dataset + all labelled user rows | ✅ |
 | D-81 | 2026-11-18 | Drift → "Retraining recommended" on the dashboard and in the report; retraining is started by hand | ✅ |
-| D-82 | 2026-11-23 | Supplementary analyses for the extended abstract in `ml/notebooks/Supplementary.ipynb` | 🔶 |
+| D-82 | 2026-11-23 | Supplementary analyses for the extended abstract in `ml/notebooks/Supplementary.ipynb` | ✅ |
 | D-83 | 2026-11-23 | Remove rows with BMI ≥ 70 from training (suspected data errors) | ✅ |
 | D-84 | 2026-11-23 | No engineered features (tested: no gain for CatBoost) | ✅ |
 | D-85 | 2026-11-23 | Retrain and re-run all analyses once, at the end of the abstract work | ✅ |
 | D-86 | 2026-11-23 | BMI ≥ 70 removed before the train/test split; new shared split file | ✅ |
+| D-87 | 2026-11-23 | Keep the default CatBoost settings after GridSearchCV (+0.0016 is below the 0.01 margin) | ✅ |
+| D-88 | 2026-11-23 | Keep all 21 features after the ANOVA F-test and top-k comparison | ✅ |
 
 ---
 
@@ -958,9 +960,9 @@ the test set like every other model. Same data, target and 80/20 split (seed 42)
 and GridSearchCV; the extended abstract should either show them or justify leaving them out, and measured numbers
 are stronger than arguments. Stratified CV instead of the course's `TimeSeriesSplit`, because the rows are survey
 respondents, not a time series.
-**Status:** 🔶 Sections 1–2 have results (`RESULTS.md`, step 13). The full run of sections 3–4 (~1 hour) was stopped
-when the session ended and will be re-run later by agreement with the team, on the data without BMI ≥ 70 (D-83).
-Whether a better tuning result changes the deployed model is a separate team decision.
+**Status:** ✅ Full run 2026-11-23, 13:31–15:00, on the data without BMI ≥ 70 (D-83, D-86); the outlier screening
+on the raw data. Results in `RESULTS.md`, step 13. Whether the tuning or feature selection results change the
+deployed model is a separate team decision.
 
 ### D-83 — Remove rows with BMI ≥ 70 from training
 **Date:** 2026-11-23
@@ -1021,3 +1023,21 @@ the 11,139 rows that **neither** model trained on: old model ROC-AUC 0.8196, new
 recall 79.5% vs. 79.7%, precision 34.2% both). On the whole new test set the old model looks better (0.8381), but
 only because it trained on 39,478 of those rows. The quality check (D-61) compared the new test ROC-AUC (0.8263) with
 the old model's stored one (0.8247, other test rows) and passed.
+
+### D-87 — Keep the default CatBoost settings after tuning
+**Date:** 2026-11-23
+**Decision:** The deployed model keeps the D-21 settings (500 trees, learning rate 0.1, depth 6, `l2_leaf_reg` 3);
+the best GridSearchCV setting (depth 6, learning rate 0.05, 500 trees, `l2_leaf_reg` 10) is not adopted.
+**Why:** The team followed the recommendation: the best setting gained +0.0016 CV ROC-AUC (0.8256 vs. 0.8240) and
++0.0008 on the test set (0.8271 vs. 0.8263), 92 fewer false alarms among 50,617 people. That is far below the +0.01
+margin agreed **before** the results for switching models (D-10); sticking to a rule fixed in advance is more
+defensible than taking every small gain. The top 10 of the 36 combinations lie within 0.0003 of each other, so there
+is no single setting that matters. All grid results are kept (`RESULTS.md`, step 13; `Supplementary.ipynb`).
+
+### D-88 — Keep all 21 features
+**Date:** 2026-11-23
+**Decision:** The model and the questionnaire keep all 21 features.
+**Why:** The team followed the recommendation: all 21 features differ significantly between the classes in the
+ANOVA F-test (p < 0.001), and fewer features cost performance: top 10 by F-score 0.8192 ROC-AUC, top 15 0.8212, all
+21 0.8241 (precision at 80% recall 32.2% / 32.5% / 33.0%). Even the 6 weakest features together add +0.003. A
+shorter questionnaire would also need changes to the model, the API and the UI.
