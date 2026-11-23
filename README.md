@@ -113,7 +113,7 @@ data/raw_data/        Kaggle CSVs                     ml/validation.py   the dat
 data/splits/          shared train/test split         ml/train.py        training + quality check + deploy
 data/store.db         data store (not in git)         ml/risk.py         risk levels and messages
 data/training_sets/   combined training data (n.i.g.) ml/store.py        data store access
-ml/notebooks/         EDA, Modeling, AutoML           ml/monitoring.py   drift report, recommendation
+ml/notebooks/         EDA, Modeling, AutoML, Suppl.   ml/monitoring.py   drift report, recommendation
 models/               trained models, latest.txt      api/main.py        Flask API (port 5001)
 tests/                pytest tests                    ui/app.py          risk check (port 8050)
 run.py, start.bat     start everything                ui/dashboard.py    monitoring dashboard

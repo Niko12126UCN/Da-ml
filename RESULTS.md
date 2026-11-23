@@ -364,6 +364,81 @@ still 99.8% survey data), so if users really are much older, drift returns once 
 predictions (D-80). Demo caveat: the 400 "users" were Kaggle test rows, so they were also in the Kaggle part of the
 combined data; real users would be new people.
 
+## Step 13 — Supplementary analyses (`ml/notebooks/Supplementary.ipynb`, 2026-11-23)
+
+Checks from the course method for the extended abstract (D-82). Sections 1–2 below are final (they train nothing);
+the feature selection and tuning results (sections 3–4) follow when the full run has been done.
+
+### Confusion matrix of the live model (test set, 50,736 people)
+
+`catboost_20261118_100430`, saved threshold 0.1508 (80% recall on out-of-fold predictions, D-23); test ROC-AUC 0.8247.
+
+| | Flagged (see a doctor) | Not flagged | Total |
+|---|---|---|---|
+| **Has prediabetes/diabetes** | 6,365 | 1,630 | 7,995 |
+| **Does not** | 12,920 | 29,821 | 42,741 |
+| **Total** | 19,285 | 31,451 | 50,736 |
+
+Recall 79.6%, precision 33.0%, specificity 69.8%, flagged 38.0%: **about 2 false alarms per real case found**. These are
+the exact counts for the live model; the "caught / missed / false alarms" table in step 2 was derived from rounded
+percentages of the CatBoost retrained in `AutoML.ipynb`.
+
+### Outliers: Z-score and IQR (training rows)
+
+Only the three numeric features can have outliers; the 18 binary/coded features are range-checked by the validation.
+
+| Feature | Median | Q3 | Max | Skewness | \|z\| > 3 | IQR k = 1.5 | IQR k = 3 | Share of zeros |
+|---|---|---|---|---|---|---|---|---|
+| BMI | 27 | 31 | 98 | 2.11 | 1.2% (> 48.2) | 3.9% (> 41.5) | 0.7% (> 52) | 0% |
+| MentHlth | 0 | 2 | 30 | 2.73 | 5.0% | 14.2% | 12.4% | 69.3% |
+| PhysHlth | 0 | 3 | 30 | 2.21 | 0.0% | 16.1% | 13.3% | 63.2% |
+
+**MentHlth / PhysHlth:** the IQR method flags 14–16% because the median is 0 (the course's warning about variables
+with many zeros). The flagged values are a real group: diabetes rate by physically bad days 12.0% (0 days), 17.6%
+(1–14), 29.7% (15–29), 32.5% (30); mentally bad days 15.0%, 14.7%, 21.9%, 26.1%. **Kept.**
+
+**BMI** (all 253,680 rows):
+
+| BMI | People | Diabetes rate | General health (1 good – 5 poor) | Difficulty walking |
+|---|---|---|---|---|
+| 25–29 | 93,749 | 13.0% | 2.41 | 13% |
+| 30–34 | 53,451 | 21.7% | 2.69 | 20% |
+| 40–44 | 8,099 | 35.3% | 3.16 | 37% |
+| 50–54 | 1,190 | 42.6% | 3.44 | 56% |
+| 60–64 | 199 | 44.2% | 3.79 | 71% |
+| 65–69 | 70 | 51.4% | 3.89 | 74% |
+| **70–98** | **599** | **15.5%** | **2.56** | **22%** |
+
+The IQR outliers up to BMI 70 are real people with higher risk (diabetes rate 37–51%). The 599 rows with BMI 70–98 are
+not: their diabetes rate and health profile match BMI 25–34, their number jumps up after falling steadily, and the
+values are almost only odd numbers (71, 73, 75, …). Full table: `bmi_bands_actual_data.csv`.
+
+**The live model has learned the error** (partial dependence: the same 5,000 test people, only BMI changed):
+
+| BMI | 25 | 30 | 40 | 50 | 60 | 65 | 70 | 75 | 80 | 90 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Mean predicted risk | 11.6% | 16.5% | 25.7% | 28.8% | 25.8% | 33.3% | 16.6% | 13.4% | 13.9% | 12.5% |
+
+A user entering BMI 75 gets about the risk of BMI 30. The curve is noisy between BMI 55 and 70 (few people per value,
+e.g. 19 at BMI 65). → **Remove BMI ≥ 70 from training** (D-83). Figure: `bmi_outlier_fund.png/.pdf` (Danish, for the
+report).
+
+### Feature engineering (5-fold CV, training rows without BMI ≥ 70: 202,464 rows, 15.76% positive)
+
+Engineered: `n_conditions`, `bad_days`, `lifestyle_score`, HighBP × HighChol, BMI × Age, GenHlth × Age (D-84).
+
+| Model | Features | ROC-AUC | PR-AUC | Precision @ 80% recall | Brier | CV time |
+|---|---|---|---|---|---|---|
+| Logistic regression | 21 | 0.8207 | 0.4484 | 0.3263 | 0.1070 | 5 s |
+| Logistic regression | 21 + 6 engineered | 0.8218 | 0.4500 | 0.3270 | 0.1068 | 15 s |
+| **CatBoost** | **21** | **0.8240** | **0.4550** | **0.3296** | **0.1063** | 56 s |
+| CatBoost | 21 + 6 engineered | 0.8240 | 0.4536 | 0.3291 | 0.1063 | 49 s |
+
+**Finding:** no gain for CatBoost (ROC-AUC ±0.0000, PR-AUC −0.0014); +0.0010 for logistic regression, which cannot
+learn interactions by itself. → **No engineered features** (D-84). Side note: logistic regression scored 0.8207 here
+vs. 0.8192 on all rows in step 1, possibly because the BMI ≥ 70 rows distort its single BMI weight; different rows
+and folds, so to be checked in the final run (D-85).
+
 ## Expected vs. actual
 
 Predictions from `Diabetes_Prediction_Feasibility.md` (written before any model was trained) compared with the

@@ -89,6 +89,10 @@ Newest decisions are at the bottom. If a decision is changed later, the old entr
 | D-79 | 2026-11-18 | Optional question "Has a doctor ever told you …?" gives stored user rows a label | ✅ |
 | D-80 | 2026-11-18 | `ml.train --with-user-data`: original dataset + all labelled user rows | ✅ |
 | D-81 | 2026-11-18 | Drift → "Retraining recommended" on the dashboard and in the report; retraining is started by hand | ✅ |
+| D-82 | 2026-11-23 | Supplementary analyses for the extended abstract in `ml/notebooks/Supplementary.ipynb` | 🔶 |
+| D-83 | 2026-11-23 | Remove rows with BMI ≥ 70 from training (suspected data errors) | ✅ (not yet implemented) |
+| D-84 | 2026-11-23 | No engineered features (tested: no gain for CatBoost) | ✅ |
+| D-85 | 2026-11-23 | Retrain and re-run all analyses once, at the end of the abstract work | ✅ |
 
 ---
 
@@ -937,3 +941,61 @@ PyCharm).
 **Why:** Closes the loop of the target picture (D-66): monitoring → data store → training → stored models →
 inference. Starting by hand keeps a person in control of when a new model is trained; the quality check (D-61) still
 decides whether it goes live. Checked end to end on temporary copies (`RESULTS.md`, step 12).
+
+### D-82 — Supplementary analyses for the extended abstract
+**Date:** 2026-11-23
+**Decision:** Four checks from the course method that the main notebooks did not cover explicitly are collected in a
+new notebook, `ml/notebooks/Supplementary.ipynb`, instead of being added to `Modeling.ipynb` (which would then have to
+be re-run in full): (1) confusion matrix of the live model with its saved threshold on the test set; (2) outliers in
+the three numeric features (`BMI`, `MentHlth`, `PhysHlth`) with Z-score (|z| > 3) and IQR (k = 1.5 and the course's
+k = 3), on the training rows; (3) ANOVA F-test (`f_classif`) on the training rows, plus CatBoost (default settings,
+D-21) on the top-5/10/15/21 features by F-score with 5-fold CV; (4) `GridSearchCV` over CatBoost `depth` {4, 6, 8} ×
+`learning_rate` {0.05, 0.1} × `iterations` {500, 1000} × `l2_leaf_reg` {1, 3, 10} (36 combinations, the default
+included), stratified 5-fold CV on the training rows, scored on ROC-AUC; the best setting is then evaluated once on
+the test set like every other model. Same data, target and 80/20 split (seed 42) as `Modeling.ipynb`.
+**Why:** The course (Sessions 1–6) lists a confusion matrix, Z-score/IQR outlier screening, ANOVA feature selection
+and GridSearchCV; the extended abstract should either show them or justify leaving them out, and measured numbers
+are stronger than arguments. Stratified CV instead of the course's `TimeSeriesSplit`, because the rows are survey
+respondents, not a time series.
+**Status:** 🔶 Sections 1–2 have results (`RESULTS.md`, step 13). The full run of sections 3–4 (~1 hour) was stopped
+when the session ended and will be re-run later by agreement with the team, on the data without BMI ≥ 70 (D-83).
+Whether a better tuning result changes the deployed model is a separate team decision.
+
+### D-83 — Remove rows with BMI ≥ 70 from training
+**Date:** 2026-11-23
+**Decision:** The 599 rows (0.24%) with BMI 70–98 are treated as suspected data errors and **removed from the training
+data**. The input validation keeps accepting BMI 12–98 (D-38): a user with a real BMI above 70 still gets a
+prediction, and because tree models extend flat beyond the highest value they have seen, it will be the risk of the
+highest trusted BMI rather than a lower one. **Not yet implemented** in `ml/train.py`; a new model must then be
+trained and pass the quality check (D-61).
+**Why:** Found by the outlier analysis (D-82, `RESULTS.md` step 13). Four signs that these rows are errors, not real
+people: (1) the diabetes rate falls from 51% at BMI 65–69 to 15.5% at BMI 70–98, the level of BMI 25–29; (2) their
+health profile matches normal-weight people (general health 2.6 and 22% difficulty walking, vs. 3.9 and 74% at BMI
+65–69); (3) the number of people falls steadily with BMI (199 at 60–64, 70 at 65–69) and then jumps to 599 at 70–98;
+(4) the values are almost only odd numbers (71, 73, 75, 77, 79, 81 …), which suggests a systematic error. The live
+model has learned the error: for the same 5,000 test people, only BMI changed, the predicted risk is 33% at BMI 65
+but 13% at BMI 75, so a user entering BMI 75 gets about the risk of BMI 30. The team chose removal over a monotonic
+constraint (simpler to explain) and over keeping the rows (a known error in the app). Figure and data for the report:
+`bmi_outlier_finding.png/.pdf` and two CSV files, made by the script kept with them.
+
+### D-84 — No engineered features
+**Date:** 2026-11-23
+**Decision:** The model keeps the 21 survey answers as they are; no engineered features are added.
+**Tested** (5-fold stratified CV on the 202,464 training rows of the data without BMI ≥ 70, D-83; CatBoost with the
+D-21 settings, logistic regression as in D-25 with the new numeric features standardised): six engineered features,
+`n_conditions` (HighBP + HighChol + Stroke + HeartDiseaseorAttack), `bad_days` (MentHlth + PhysHlth),
+`lifestyle_score` (PhysActivity + Fruits + Veggies − Smoker − HvyAlcoholConsump), and the interactions
+HighBP × HighChol, BMI × Age, GenHlth × Age.
+**Why:** CatBoost: ROC-AUC 0.8240 with and without them, PR-AUC 0.4550 → 0.4536. Logistic regression: +0.0010
+ROC-AUC (0.8207 → 0.8218), still below CatBoost without them. Each row is one respondent at one point in time, and
+the trees learn interactions between the answers themselves, so features built from the same 21 answers add no
+information (`RESULTS.md`, step 13). The section is added to `Supplementary.ipynb` for the final run (D-85).
+
+### D-85 — Retrain and re-run everything once, at the end
+**Date:** 2026-11-23
+**Decision:** The changes decided while preparing the extended abstract (so far D-83, BMI ≥ 70 removed) are
+implemented and the model is retrained **once, at the end**, followed by one full run of `Supplementary.ipynb` on the
+new data. Until then the live model stays `catboost_20261118_100430`.
+**Why:** The team's decision: more changes may follow while the remaining gaps are discussed, and retraining plus
+the ~1-hour notebook run should only be done once. The checklist is in `PROJECT_PLAN.md` ("Before the abstract is
+final").

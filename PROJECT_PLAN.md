@@ -41,6 +41,18 @@ Build a complete pipeline that can:
 | 10. Monitoring: data drift, prediction drift, volume, errors per model (`ml/monitoring.py`) | ✅ Done (2026-11-18) |
 | 11. Real-time dashboard (`/dashboard`, API `/monitoring`) | ✅ Done (2026-11-18) |
 | 12. Closing the loop: label question, "retraining recommended", `--with-user-data` | ✅ Done (2026-11-18) |
+| **Extended abstract** | |
+| 13. Supplementary analyses (`ml/notebooks/Supplementary.ipynb`, D-82): confusion matrix, outliers ✅; feature selection, tuning: full run pending | 🔶 In progress (2026-11-23) |
+| Remove BMI ≥ 70 from training (D-83) + new model through the quality check | ⬜ Decided, not implemented |
+| Feature engineering tested: no engineered features (D-84) | ✅ Done (2026-11-23) |
+
+### Before the abstract is final (D-85: do this once, at the end)
+
+1. Implement every change decided for the abstract in `ml/train.py` (so far: D-83, drop BMI ≥ 70) + tests.
+2. Retrain (`python -m ml.train`); the new model must pass the quality check (D-61).
+3. Point `Supplementary.ipynb` at the same data (BMI ≥ 70 removed in sections 3–4) and run it in full (~1 hour),
+   including the feature engineering section (D-84) and the logistic regression check on the cleaned data.
+4. Update the numbers in `RESULTS.md`, the BMI figure (new model in panel B, if wanted) and the abstract.
 
 ## 3. Model selection approach
 
@@ -154,6 +166,7 @@ Da-ml/
 │   ├── notebooks/EDA.ipynb        # EDA + YData profiling report (Diabetes_EDA_Profile.html)
 │   ├── notebooks/Modeling.ipynb   # logistic regression vs. CatBoost, balancing, threshold (step 1)
 │   ├── notebooks/AutoML.ipynb     # AutoGluon benchmark, separate environment (step 2)
+│   ├── notebooks/Supplementary.ipynb  # confusion matrix, outliers, feature selection, tuning (step 13, D-82)
 │   ├── validation.py              # the dataset format + input checks, used by training and API (D-37)
 │   ├── train.py                   # validate → train → quality check → deploy (D-43, D-61)
 │   ├── risk.py                    # risk levels and messages (D-48, D-49)
